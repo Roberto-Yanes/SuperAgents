@@ -1,6 +1,37 @@
 # 05. Flujos clave
 
+Estas secuencias son trazas de una puerta de entrada o de una tool. No son el catálogo de lo que el negocio puede pedirle al agente. El agente arma el plan en la Task (`docs/adr/003-runtime-agentes-autonomos.md`). WhatsApp es una puerta. La otra es la app.
+
+## 0. Objetivo lanzado desde la app
+
+```mermaid
+sequenceDiagram
+  participant U as Dueño en la app
+  participant API as API
+  participant T as Task
+  participant RT as Runtime
+  participant LLM as LLM en la UE
+  U->>API: POST /v1/tasks con el objetivo
+  API->>T: PLANNING, cupo, workspace del principal
+  T->>RT: tramo RUNNING
+  RT->>LLM: contexto y tools permitidas
+  LLM-->>RT: plan y una tool
+  alt la tool supera el riesgo del tenant
+    RT->>T: WAITING_APPROVAL
+    U->>API: decide
+    API->>RT: reanuda el mismo tramo
+  else efecto directo
+    RT->>RT: outbox y checkpoint
+  end
+  RT->>T: SUCCEEDED, BLOCKED o FAILED, con auditoría
+  API-->>U: eventos del plan y del cierre
+```
+
+No hay pasos fijos entre el objetivo y el cierre. El diagrama solo muestra que la app no pasa por WhatsApp y que una tool riesgosa reutiliza la aprobación.
+
 ## 1. WhatsApp entrante → respuesta del agente
+
+Un mensaje abre una Task de canal con cupo corto y cara externa. No abre el flujo de “recepcionista”. Si ya hay un run en `WAITING_APPROVAL`, el mensaje se guarda y no llama al modelo (`docs/adr/001-cola-durante-aprobacion.md`).
 
 ```mermaid
 sequenceDiagram
@@ -68,7 +99,9 @@ sequenceDiagram
 
 `team.handoff_to_agent` es distinto: transfiere **la conversación** (por ejemplo, de Recepción a Ventas en WhatsApp) y el agente original deja de responder en ella.
 
-## 3. Secuencia de seguimiento
+## 3. Secuencia de seguimiento (tool, no el producto)
+
+El agente inscribe una secuencia solo si el plan lo pide. Un seguimiento también puede ser una Task que manda un mensaje, espera y vuelve a mirar el lead, sin estos pasos.
 
 ```mermaid
 sequenceDiagram

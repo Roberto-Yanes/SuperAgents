@@ -1,7 +1,7 @@
 # AGENTS.md: reglas para agentes de código (Codex, Claude Code, Kimi)
 
 ## Proyecto
-Motor multiagente headless en TypeScript. Docs en `docs/` (empezá por `docs/README.md`). La UI no está en este repo.
+Motor de Everglow para agentes autónomos: el agente recibe un objetivo, planifica y ejecuta. WhatsApp es un canal, no el producto. No lo acoples a Studio (Galatea). Los LLM de clientes europeos van en la UE. Empezá por `docs/README.md` y `docs/adr/003-runtime-agentes-autonomos.md`. La UI no está en este repo. El `user_id` de Composio que usa el código es `ega:<workspaceId>:integration`.
 
 ## Comandos
 - `pnpm install`

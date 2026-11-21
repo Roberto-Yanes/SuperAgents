@@ -1,8 +1,12 @@
-# Arquitectura — Plataforma multiagente (MVP · paridad Auryx)
+# Arquitectura — everglow-agentes
 
 Versión 1.0 · 21/11/2026 · implementa el diagrama ([arquitectura-v3.png](arquitectura-v3.png)) «Plataforma Multiagente: arquitectura de referencia (MVP)», docs-v3 v1.1.
 
-Motor headless 24/7, un workspace (listo para multitenant). La UI estilo Grok Bot es un proyecto aparte que solo habla con la API pública.
+Motor headless 24/7 de Everglow, un workspace (listo para multitenant). La app es un proyecto aparte y solo habla con la API pública. No es Studio (Galatea): no compartas auth, base ni claves.
+
+La dirección de producto no es un catálogo de flujos ni “solo WhatsApp”. El agente recibe un objetivo, planifica y ejecuta ([ADR 003](adr/003-runtime-agentes-autonomos.md)). WhatsApp es el canal que contesta. El orden de trabajo está en [ROADMAP.md](ROADMAP.md). Los modelos de los clientes europeos tienen que procesar en la UE ([ADR 005](adr/005-llm-residencia-ue.md)). En los textos de abajo, “estilo Grok Bot” describe la forma del chat de aquella spec: el modelo de xAI no se usa.
+
+El diagrama y la tabla de capas son la foto del motor. Si un estado dice “pendiente” y [REVIEW-FIXES.md](REVIEW-FIXES.md) lo marca hecho, quedate con la revisión.
 
 Estado de implementación marcado sobre el diagrama: [arquitectura-v3-estado.png](arquitectura-v3-estado.png) (se regenera con `python3 docs/annotate-estado.py`).
 

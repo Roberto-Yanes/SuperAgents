@@ -45,4 +45,4 @@
 - Webhooks de Meta: verificación `X-Hub-Signature-256` con App Secret; rechazo si no coincide.
 - Rate limit por credencial e IP; bloqueo tras intentos fallidos de login.
 - Auditoría (`AuditLog`) de: login, creación de keys, cambios de agentes y tools, aprobaciones, takeover, envíos humanos, cambios de proveedor de canal, alta y baja de conexiones de Composio, habilitación de `AppTool` y cada ejecución de tool de app (slug, conexión, resultado, sin payload sensible).
-- Datos personales: exportar y borrar contacto (`DELETE /contacts/:id` borra en cascada mensajes y memoria) ⚠ VERIFICAR requisitos legales locales (Ley 25.326 en Argentina, RGPD si hay clientes en la UE).
+- Datos personales: los clientes del producto son europeos (España). Aplica el RGPD, no como caso hipotético. Exportar y borrar un contacto incluye mensajes, memoria y tareas de canal. Los LLM tienen que procesar en la UE y la auditoría tiene que mostrar modelo, región, tool y decisión. La regla está en `docs/adr/005-llm-residencia-ue.md`. Grok y los endpoints sin región UE no se conectan. Composio Cloud sigue siendo un subencargado en Estados Unidos: si el cliente no lo acepta, no uses esa app.

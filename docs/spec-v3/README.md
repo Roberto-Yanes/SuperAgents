@@ -1,6 +1,8 @@
 # Plataforma multiagente headless (docs-v3)
 
-Motor y backend de una plataforma de agentes de IA para pymes: atención por WhatsApp, agenda, leads, seguimientos, rutinas, plantillas por rubro, chat del dueño con sus agentes y equipos con delegación. **Headless**: no trae UI. La UI estilo Grok Bot (desktop, web o móvil) es un cliente aparte que se conecta por la **API pública** (REST + WebSocket + SSE).
+Diseño original del motor. La dirección vigente está en `docs/adr/` y `docs/ROADMAP.md`. Si este árbol dice que el producto es un flujo fijo o solo WhatsApp, gana el ADR 003: el agente recibe un objetivo, investiga, planifica y ejecuta. WhatsApp es un canal. Las secuencias y las plantillas son atajos. Los modelos de clientes europeos van en la UE (ADR 005). everglow-agentes es de Everglow; no lo acoples a Studio (Galatea).
+
+Motor y backend de agentes de IA para un negocio: tareas autónomas, atención por WhatsApp, agenda, leads, seguimientos, rutinas y chat del dueño con sus agentes. **Headless**: no trae UI. La app (desktop, web o móvil) es un cliente aparte que se conecta por la **API pública** (REST + WebSocket + SSE). “Estilo Grok Bot” más abajo nombra esa forma de chat, no el modelo de xAI, que no está permitido.
 
 - Corre como **proceso de servidor de larga vida** (Docker) en un VPS, una PC o una mini PC: los agentes trabajan 24/7 aunque no haya ninguna UI abierta.
 - **Un workspace primero**, pero todas las entidades llevan `workspaceId` y todo acceso pasa por sesión o API key: pasar a multitenant es habilitar un switch, no reescribir.
@@ -12,7 +14,7 @@ Estado: **propuesta lista para implementar**. Lo no confirmado está marcado ⚠
 
 | Doc | Contenido |
 |---|---|
-| [00-vision-y-alcance.md](00-vision-y-alcance.md) | Qué es, MVP (paridad Auryx), fuera de alcance |
+| [00-vision-y-alcance.md](00-vision-y-alcance.md) | Qué es, capacidades del motor, fuera de alcance |
 | [01-arquitectura.md](01-arquitectura.md) | Componentes, despliegue, procesos |
 | [02-conceptos.md](02-conceptos.md) | Workspace, Agente, Tool, Canal, Run, Aprobación, etc. |
 | [03-modelo-de-datos.md](03-modelo-de-datos.md) | Esquema Prisma (validado) |

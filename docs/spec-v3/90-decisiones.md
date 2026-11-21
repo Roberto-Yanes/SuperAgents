@@ -2,6 +2,8 @@
 
 Formato corto: contexto, decisión, consecuencias. Estado: aceptada salvo indicación.
 
+Estos ADR son el diseño original. Los de `docs/adr/` son la dirección vigente y ganan si discuten. En particular: el ADR 003 (agente autónomo, no un flujo), el ADR 004 (pg-boss detrás de un puerto; Temporal solo con criterios) y el ADR 005 (LLM solo en la UE). El `user_id` de Composio que de verdad usa el código es `ega:<workspaceId>:integration`, no el `ws_<id>:integration` de este archivo: no lo cambies, las cuentas conectadas dependen de él (`docs/adr/002-composio-una-key.md`).
+
 ## ADR-001. Plataforma headless y API-first
 - **Contexto**: la UI estilo Grok Bot se hace aparte (desktop, web, móvil) y debe poder cambiar sin tocar el motor.
 - **Decisión**: el repo no incluye UI. Todo se expone por REST + WS + SSE con OpenAPI y SDK TS.
@@ -23,7 +25,7 @@ Formato corto: contexto, decisión, consecuencias. Estado: aceptada salvo indica
 
 ## ADR-005. pg-boss como cola y scheduler
 - **Contexto**: hace falta cola durable, reintentos, cron, envíos diferidos y serializar por conversación.
-- **Decisión**: pg-boss 12 (grupos con `groupConcurrency`, `singletonKey`, `startAfter`, `deadLetter`, `schedule`).
+- **Decisión**: pg-boss 12 (grupos con `groupConcurrency`, `singletonKey`, `startAfter`, `deadLetter`, `schedule`). Sigue siendo el adaptador. El dominio tiene que hablarle a un puerto, no a pg-boss. Temporal (self-hosted en Hetzner EU) entra solo con los criterios de `docs/adr/004-motor-jobs-pgboss-temporal.md`.
 - **Alternativas**: BullMQ (requiere Redis), SQLite con cola propia (más código). Para un despliegue mínimo sin Postgres no hay soporte en el MVP.
 - **Consecuencias**: sin Redis.
 
@@ -33,7 +35,7 @@ Formato corto: contexto, decisión, consecuencias. Estado: aceptada salvo indica
 - **Consecuencias**: el socket de Baileys vive en un único proceso (advisory lock); Cloud API necesita HTTPS público.
 
 ## ADR-007. LLM por API key multi-proveedor, más modelos locales
-- **Decisión**: Vercel AI SDK con OpenAI, Anthropic, Google; Ollama y LM Studio por endpoint local. Claves en `Credential` (`LLM_*`) del workspace, cifradas en nuestro vault (no pasan por Composio).
+- **Decisión**: Vercel AI SDK, clave del workspace en nuestro vault (no pasa por Composio). La lista abierta de este ADR queda cerrada por `docs/adr/005-llm-residencia-ue.md`: solo proveedores con región UE (Azure OpenAI EU, Mistral, modelo hospedado en la UE, Ollama en el servidor de la UE). Grok y los endpoints públicos sin región se rechazan.
 - **Consecuencias**: costos medibles por run (`Run.costUsd` con tabla de precios por modelo en `packages/llm`); no se usan CLI con suscripción personal para atender clientes.
 
 ## ADR-008. Caras externa e interna separadas por código

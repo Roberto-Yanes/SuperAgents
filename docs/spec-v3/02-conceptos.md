@@ -11,20 +11,20 @@
 | **Connection** | Cuenta de una app de terceros conectada por Composio (= *connected account* de Composio): Holded, Google Calendar, Gmail, HubSpot… | Guardamos `composioConnectedAccountId`, `toolkit` y `status`; los tokens o API keys los custodia Composio. Dueño: el negocio (`ws_<id>:integration`) o un miembro (`ws_<id>:user_<id>`) |
 | **Credential** | Secreto propio que no pasa por Composio: clave de LLM, SMTP | Cifrado en nuestro vault (`Secret`) |
 | **AppTool** | Acción de Composio habilitada en el workspace y publicada como tool (`app.holded.create_contact`) | Lleva nuestras reglas: scope, riesgo, aprobación, versión fijada del toolkit |
-| **Channel** | Punto de contacto con clientes (un número de WhatsApp, una casilla) | `provider` intercambiable: `BAILEYS` o `META_CLOUD` |
+| **Channel** | Una puerta de entrada. WhatsApp es una; no es el producto | `provider` intercambiable: `BAILEYS` o `META_CLOUD` |
 | **Contact** | Persona externa (cliente o prospecto) | Varias `ContactIdentity` (teléfono, email, IG) |
 | **Conversation** | Hilo de mensajes | `EXTERNAL` (contacto por canal) o `INTERNAL` (usuario con agente) |
 | **Message** | Mensaje entrante o saliente | Rol: `CONTACT`, `AGENT`, `HUMAN`, `USER`, `SYSTEM`, `TOOL` |
 | **Lead** | Oportunidad comercial ligada a un contacto | Embudo propio; espejo opcional en el CRM que elija el negocio (Holded, HubSpot…) vía Composio y `ExternalLink` |
-| **Run** | Una ejecución de agente (responder, cumplir una tarea, una rutina) | Estados en `06-confiabilidad.md` |
+| **Run** | Un tramo de una Task: una tanda del loop hasta que pausa o termina | Estados en `06-confiabilidad.md` |
 | **RunStep** | Paso del run: llamada LLM, tool, delegación, mensaje | Checkpoint para reanudar |
-| **Task** | Trabajo asignado (por el dueño o por otro agente) que produce runs | `delegate_task` crea una Task hija |
-| **Routine** | Disparador programado o por evento que crea Tasks | `CRON`, `EVENT`, `WEBHOOK` |
-| **Sequence** | Seguimiento multicanal en pasos con espera | `Enrollment` por contacto; se corta si responde |
+| **Task** | El objetivo. Tiene plan, cupo, gasto y checkpoints. La abre la app, un canal, una rutina o una delegación | El modelo completo está en `docs/adr/003-runtime-agentes-autonomos.md`. `delegate_task` crea una Task hija |
+| **Routine** | Disparador programado o por evento que abre una Task con un objetivo | `CRON`, `EVENT`, `WEBHOOK`. No es un guion |
+| **Sequence** | Tool de seguimiento en pasos con espera. El agente la inscribe si le sirve | `Enrollment` por contacto; se corta si responde. No es el camino obligatorio |
 | **Approval** | Pedido de autorización humana antes de un efecto | Persistido; pausa el run |
 | **Memory** | Hechos recordados (por contacto, por agente, del workspace) | Escritos por tool `remember` o al cerrar conversaciones |
 | **KnowledgeSource** | FAQ, precios, documentos del negocio | Chunks con embeddings (RAG) |
-| **Template** | Paquete instalable por rubro | Crea agentes, tools, secuencias, FAQ, horarios |
+| **Template** | Semilla instalable por rubro | Crea un agente de partida, tools, FAQ y horarios. No fija el flujo del negocio |
 | **Event** | Hecho del sistema con `seq` monotónica | Alimenta WS, auditoría y disparadores EVENT |
 
 ## Configuración de un agente

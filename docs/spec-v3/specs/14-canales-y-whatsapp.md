@@ -1,5 +1,7 @@
 # 14. Canales y WhatsApp (F2)
 
+WhatsApp es un canal: el agente que contesta. Las tareas de seguimiento, contenido y las que se lanzan desde la app no entran por acá (`docs/adr/003-runtime-agentes-autonomos.md`).
+
 Hoy WhatsApp corre con **Baileys**; la aplicación de Tech Provider está presentada y se espera a Meta. Por eso los dos proveedores son adaptadores de la misma interfaz y se cambia por canal.
 
 Los canales son nativos y **no** pasan por Composio (ADR-014): son transporte entrante en tiempo real (socket o webhook firmado con respuesta inmediata, ventana de 24 h, takeover, orden por conversación). El único canal que se apoya en Composio es `COMPOSIO_EMAIL` (spec 19).

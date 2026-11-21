@@ -1,5 +1,7 @@
 # 19. Rutinas, seguimientos y email (F5)
 
+Una secuencia es una tool que el agente puede inscribir, no el camino obligatorio del seguimiento. El objetivo vive en la Task (`docs/adr/003-runtime-agentes-autonomos.md`). El cron y el `startAfter` pasan por el puerto de jobs (`docs/adr/004-motor-jobs-pgboss-temporal.md`); pg-boss es el adaptador de hoy.
+
 ### T19.1. Rutinas
 - **Hacer**: CRUD `/v1/routines`; CRON con `boss.schedule` (`singletonKey = routineId:slot`); EVENT suscripto a tipos de `Event` (por ejemplo `lead.updated` con filtro); WEBHOOK por `/v1/hooks/routines/:token`; cada disparo crea `Task` y `Run ROUTINE`; `POST /v1/routines/:id/run`.
 - **Modo port** (semántica): `../tropa-desktop/operations.mjs` (no superponer, condensar vencidas).

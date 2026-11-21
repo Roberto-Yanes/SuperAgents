@@ -1,5 +1,7 @@
 # 11. Runtime de agentes (F1)
 
+Estas tareas describen el loop de un tramo (un Run). La unidad de producto es la Task del `docs/adr/003-runtime-agentes-autonomos.md`: objetivo, plan y cupos. No las conviertas en un flujo predefinido. El modelo tiene que cumplir `docs/adr/005-llm-residencia-ue.md`.
+
 ### T11.1. Capa LLM
 - **Leer**: `docs/08-stack-y-repo.md` (LLM), `docs/90-decisiones.md` ADR-007.
 - **Hacer**: `packages/llm` con `getModel(workspaceId, {provider, model})` sobre Vercel AI SDK; claves desde `Credential LLM_*` vía `packages/vault` (no pasan por Composio); tabla de precios por modelo para calcular costo; `listModels()` (incluye Ollama `/api/tags` y LM Studio `/v1/models`).

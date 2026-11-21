@@ -1,5 +1,7 @@
 # Revisión de código · everglow-agentes v2 · 21/11/2026
 
+Foto de esa revisión. No es el backlog y no redefine el producto. Lo que se corrigió después está en `docs/REVIEW-FIXES.md` (H1 y la cola de mensajes, contactos, inbox, agenda, leads, rutinas). La dirección vigente es un agente autónomo, con WhatsApp como un canal: `docs/adr/003-runtime-agentes-autonomos.md` y `docs/ROADMAP.md`.
+
 Esta es la segunda pasada sobre el zip v2. Copia revisada: `impl-review/src-v2/everglow-agentes/`. Tu código original no se tocó.
 
 Sigue a `revision-codigo.md` (v1). Los IDs C1, H1…H6, M1…M12 y L1…L10 son los mismos de ese documento. Las rutas de archivo son relativas a `apps/server/src/` salvo que se diga otra cosa.

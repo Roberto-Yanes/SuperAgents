@@ -1,5 +1,13 @@
 # Operación
 
+## Residencia
+
+Los clientes son europeos. El Postgres, los backups y el proceso van en un proveedor de la UE. La referencia es Hetzner. No subas un volumen con mensajes de clientes a una región de afuera.
+
+Los modelos son BYOK y tienen que declarar región UE ([ADR 005](adr/005-llm-residencia-ue.md)). Hasta que el producto rechace solo los hosts de afuera, no cargues claves de xAI, de `api.openai.com` ni de otro endpoint sin región UE. `LLM_BASEURL_ALLOWLIST` limita hosts; no reemplaza esa regla.
+
+Composio Cloud procesa en Estados Unidos. Si el cliente exige residencia UE para esas acciones, no uses esa app o usá Composio self-hosted. Temporal, si algún día aplica, también va en Hetzner EU ([ADR 004](adr/004-motor-jobs-pgboss-temporal.md)).
+
 ## Despliegue (VPS, PC o mini PC)
 
 1. Docker y Docker Compose instalados; dominio apuntando al servidor (puertos 80 y 443 abiertos).

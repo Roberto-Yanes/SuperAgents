@@ -103,3 +103,15 @@ Los servicios que atienden a un workspace (conversaciones, contactos, agentes, c
 ## D-020. Una sola API key de Composio por servidor
 
 `COMPOSIO_API_KEY` es del proceso, no de la conexión ni del workspace. Si falta, Composio queda deshabilitado. Detalle en `docs/adr/002-composio-una-key.md`.
+
+## D-021. El producto es un agente autónomo, no un flujo
+
+everglow-agentes (Everglow, separado de Studio/Galatea) recibe un objetivo, investiga, planifica, usa tools y ejecuta. WhatsApp es un canal. Las secuencias y las plantillas son atajos, no el producto. La unidad de trabajo es una Task. Detalle en `docs/adr/003-runtime-agentes-autonomos.md`.
+
+## D-022. pg-boss detrás de un puerto
+
+No se cambia a Temporal hasta que se mida uno de los criterios del `docs/adr/004-motor-jobs-pgboss-temporal.md` (tareas largas que no se pueden reconstruir, reintentos sin historia, Postgres cargado por la cola). Si se migra: activity = loop, workflow = estado y checkpoints, hospedaje en Hetzner EU.
+
+## D-023. LLM solo con región UE
+
+BYOK, pero el proveedor y la región se validan al guardar y al usar. Azure OpenAI EU, Mistral EU, modelos hospedados en la UE o el servidor propio en la UE. Grok y los endpoints públicos sin región UE se rechazan. “Estilo Grok Bot” en la spec nombra un chat, no ese modelo. Detalle en `docs/adr/005-llm-residencia-ue.md`.

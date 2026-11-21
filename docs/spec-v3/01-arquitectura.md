@@ -1,5 +1,9 @@
 # 01. Arquitectura
 
+## Cómo leer este diseño
+
+Los flujos numerados de abajo son trazas de dos puertas de entrada (un mensaje de WhatsApp y un mensaje de la app), no un catálogo de flujos de negocio. El agente no recorre un guion: abre una Task, arma un plan y usa tools (`docs/adr/003-runtime-agentes-autonomos.md`). La cola es pg-boss detrás de un puerto (`docs/adr/004-motor-jobs-pgboss-temporal.md`). Los LLM de la figura solo valen si la región es UE (`docs/adr/005-llm-residencia-ue.md`). La UI es la app de Everglow, un cliente aparte. No es Grok y no es Studio.
+
 ## Arquitectura de referencia (MVP)
 
 ![Plataforma Multiagente: arquitectura de referencia (MVP)](diagramas/arquitectura.png)

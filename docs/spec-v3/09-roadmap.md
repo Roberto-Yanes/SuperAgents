@@ -1,6 +1,8 @@
 # 09. Roadmap
 
-Un desarrollador con agentes de código. Semanas aproximadas.
+Este calendario era el camino a la paridad de capacidades del primer corte. Ya no es el orden de trabajo. El backlog vigente, con criterios de aceptación, está en `docs/ROADMAP.md` (Task autónoma, puerto de jobs, LLM en la UE, y los pendientes M9, `crm.sync`, RAG, plantillas de WhatsApp y Embedded Signup).
+
+Un desarrollador con agentes de código. Las semanas de abajo son historia, no un plan.
 
 | Fase | Contenido | Specs | Semanas | Acumulado |
 |---|---|---|---|---|

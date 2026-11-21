@@ -1,5 +1,7 @@
 # 22. Plantillas por rubro (F7)
 
+Una plantilla instala un agente de partida (prompt, tools, horarios, una secuencia semilla). No instala el flujo que el negocio va a recorrer: eso lo decide el agente en cada Task.
+
 Base: spec 16 de docs-v2.
 
 ### T22.1. Formato
