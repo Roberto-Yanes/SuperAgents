@@ -14,55 +14,69 @@ Estado de implementación marcado sobre el diagrama: [arquitectura-v3-estado.png
 
 ```mermaid
 flowchart TB
-  subgraph C01["01 Clientes"]
-    UI["UI estilo Grok Bot"]
+  subgraph C01["01 Entradas"]
+    APP["App Everglow: órdenes y objetivos del equipo"]
+    WA["WhatsApp: Cloud API / Baileys"]
     INT["Integraciones por API key"]
-    TEAM["Equipo del negocio"]
   end
   subgraph C02["02 Acceso / API · src/access"]
     GW["API Gateway Fastify: REST /v1, SSE, Idempotency-Key, rate limit"]
-    AUTH["Auth: Better Auth + API keys con scopes"]
-    OAS["OpenAPI 3.1 desde zod → packages/sdk"]
+    AUTH["Auth: Better Auth + API keys con scopes · tenant-guard"]
   end
-  subgraph C03["03 Orquestación · src/orchestration"]
-    RT["Agent runtime: tool calling con checkpoint por paso"]
-    APR["Aprobaciones: NEVER · ASK_OWNER · ALWAYS, caducan solas"]
-    LLM["Capa LLM: OpenAI, Anthropic, Gemini, locales"]
-    MEM["Memoria y RAG (siguiente)"]
-    ORC["Orquestador multiagente (post-MVP)"]
+  subgraph C03["03 Runtime de agentes autónomos · ADR-003"]
+    TASK["Task: objetivo, plan, estados, checkpoints"]
+    LOOP["Loop planificar-actuar-observar con cupo de pasos, costo y tiempo"]
+    RISK["Política de riesgo por tenant: directo o aprobación"]
+    APR["Aprobaciones + cola D1"]
+    MEM["Memoria: RAG del negocio, contacto, notas del agente"]
+    DEL["Delegación a tareas hijas (si hace falta)"]
   end
-  subgraph C04["04 Dominio · src/domain"]
-    DOM["Agentes · Contactos · Conversaciones · Inbox y takeover"]
-    DOM2["Leads · Agenda · Secuencias · Rutinas · Plantillas · Conocimiento (siguientes)"]
+  subgraph C04["04 LLM BYOK con residencia UE · ADR-005"]
+    LLM["Azure OpenAI UE · Mistral · modelos alojados en la UE · validación de región"]
   end
-  subgraph C05["05 Integraciones · src/integrations"]
-    TR["Registro de tools: ToolDef zod con scope, riesgo, aprobación"]
-    CH["Adaptadores de canal: interfaz ChannelAdapter"]
-    CG["Composio Gateway (siguiente)"]
+  subgraph C05["05 Tools e integraciones"]
+    TR["Registro de tools: scope, riesgo, aprobación"]
+    CG["Composio Gateway: una key por servidor"]
+    DOM["Módulos: leads, agenda, contenido, secuencias, rutinas, CRM"]
+    CH["Adaptadores de canal + outbox"]
   end
-  subgraph C06["06 Ejecución · src/execution"]
-    Q["Cola pg-boss 12: run.process (serializada por conversación), channel.inbound, message.outbound, run.sweep..."]
-    BUS["Bus de eventos: tabla Event con seq + LISTEN/NOTIFY"]
+  subgraph C06["06 Ejecución · ADR-004"]
+    PORT["Puerto de jobs / workflows"]
+    Q["pg-boss hoy"]
+    TMP["Temporal en Hetzner UE (cuando lo exijan los criterios)"]
+    BUS["Bus de eventos: Event + LISTEN/NOTIFY"]
   end
-  subgraph C07["07 Datos · src/data + prisma/"]
-    PG[("PostgreSQL 16 + pgvector · Prisma 7 · workspaceId en toda entidad")]
+  subgraph C07["07 Datos y cumplimiento"]
+    PG[("PostgreSQL 16 + pgvector · workspaceId en toda entidad")]
+    AUD["Auditoría RGPD: decisión, dato, tool, modelo, región"]
   end
-  UI --> GW
+  APP --> GW
   INT --> GW
-  TEAM --> GW
+  WA --> CH
+  CH --> PORT
   GW --> AUTH
-  GW --> DOM
-  GW --> Q
-  Q --> RT
-  RT --> LLM
-  RT --> TR
-  RT --> APR
-  RT --> BUS
+  GW --> TASK
+  TASK --> PORT
+  PORT --> Q
+  PORT -.-> TMP
+  Q --> LOOP
+  LOOP --> LLM
+  LOOP --> MEM
+  LOOP --> TR
+  TR --> RISK
+  RISK --> APR
+  TR --> CG
+  TR --> DOM
+  TR --> CH
+  LOOP --> DEL
+  DEL --> TASK
+  LOOP --> BUS
+  LOOP --> AUD
   BUS --> GW
-  CH --> Q
-  DOM --> PG
   Q --> PG
-  BUS --> PG
+  MEM --> PG
+  AUD --> PG
+  DOM --> PG
 ```
 
 | Capa del diagrama          | Carpeta                                           | Estado                                                                                                                                                                                                                                                        |
