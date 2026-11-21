@@ -27,17 +27,13 @@ export async function handleChannelInbound(ctx: ChannelInboundDeps, data: JobPay
     ...(data.from.phone ? { phone: data.from.phone } : {}),
     name: data.from.name,
   });
-  const conversation = await ctx.db.conversation.upsert({
-    where: { workspaceId_channel_externalThreadId: { workspaceId: data.workspaceId, channel: data.channel, externalThreadId: data.externalThreadId } },
-    update: {},
-    create: {
-      workspaceId: data.workspaceId,
-      agentId,
-      contactId: contact.id,
-      channel: data.channel,
-      connectionId: connection.id,
-      externalThreadId: data.externalThreadId,
-    },
+  const conversation = await upsertThread(ctx, {
+    workspaceId: data.workspaceId,
+    agentId,
+    contactId: contact.id,
+    channel: data.channel,
+    connectionId: connection.id,
+    externalThreadId: data.externalThreadId,
   });
   await ctx.conversations.receive({
     workspaceId: data.workspaceId,
@@ -47,4 +43,39 @@ export async function handleChannelInbound(ctx: ChannelInboundDeps, data: JobPay
     channelMessageId: data.channelMessageId,
     trigger: "channel.inbound",
   });
+}
+
+/** Un hilo por conexión. Si dos entregas coinciden, la única gana y la otra relee (N2/N4). */
+async function upsertThread(
+  ctx: ChannelInboundDeps,
+  data: { workspaceId: string; agentId: string; contactId: string; channel: string; connectionId: string; externalThreadId: string },
+) {
+  const where = {
+    workspaceId_connectionId_externalThreadId: {
+      workspaceId: data.workspaceId,
+      connectionId: data.connectionId,
+      externalThreadId: data.externalThreadId,
+    },
+  };
+  try {
+    return await ctx.db.conversation.upsert({
+      where,
+      update: {},
+      create: {
+        workspaceId: data.workspaceId,
+        agentId: data.agentId,
+        contactId: data.contactId,
+        channel: data.channel,
+        connectionId: data.connectionId,
+        externalThreadId: data.externalThreadId,
+      },
+    });
+  } catch (err) {
+    if ((err as { code?: string }).code !== "P2002") throw err;
+    const again = await ctx.db.conversation.findFirst({
+      where: { workspaceId: data.workspaceId, connectionId: data.connectionId, externalThreadId: data.externalThreadId },
+    });
+    if (!again) throw err;
+    return again;
+  }
 }

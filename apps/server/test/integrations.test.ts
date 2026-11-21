@@ -48,7 +48,11 @@ describe("Composio Gateway", () => {
       { toolCalls: [{ id: "c1", name: "composio__gmail_send_email", input: { to: "ana@x.com", body: "Hola" } }] },
       { text: "Correo enviado." },
     ]);
+    const previousKey = process.env.COMPOSIO_API_KEY;
+    process.env.COMPOSIO_API_KEY = "cmp-key-123456";
     const ctx = testContext({ queue, composioClient: fakeClient, llm: new StaticLlmResolver(scripted.model) });
+    if (previousKey === undefined) delete process.env.COMPOSIO_API_KEY;
+    else process.env.COMPOSIO_API_KEY = previousKey;
     contexts.push(ctx);
     await resetDb(ctx);
     const ws = await ctx.db.workspace.create({ data: { name: "cmp", slug: "cmp" } });
@@ -57,7 +61,6 @@ describe("Composio Gateway", () => {
       {
         kind: "composio",
         name: "composio",
-        secret: { apiKey: "cmp-key-123456" },
         config: { tools: [{ slug: "GMAIL_SEND_EMAIL" }, { slug: "GMAIL_FETCH_EMAILS" }] },
       },
       systemActor,

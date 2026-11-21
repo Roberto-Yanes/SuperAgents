@@ -49,7 +49,7 @@ export class LeadService {
     const blocked = removed.filter((e) => e._count.leads > 0);
     if (blocked.length) throw conflict("stage_in_use", `Hay leads en: ${blocked.map((b) => b.name).join(", ")}`);
     await this.d.db.$transaction(async (tx) => {
-      await tx.pipelineStage.deleteMany({ where: { id: { in: removed.map((r) => r.id) } } });
+      await tx.pipelineStage.deleteMany({ where: { workspaceId, id: { in: removed.map((r) => r.id) } } });
       for (const [position, s] of stages.entries()) {
         await tx.pipelineStage.upsert({
           where: { workspaceId_name: { workspaceId, name: s.name } },

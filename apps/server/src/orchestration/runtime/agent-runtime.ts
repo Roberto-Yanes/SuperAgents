@@ -10,6 +10,7 @@ import type { ReplyDelivery } from "./reply-delivery.js";
 import type { ToolBinder } from "./tool-binder.js";
 import { fromJson, StepRecorder, type RunStore, type RunWithAgent } from "./run-store.js";
 import { buildSystemPrompt, faceOf, historyToMessages } from "./prompt.js";
+import type { ConversationService } from "../../domain/conversations/service.js";
 
 export interface RuntimeDeps {
   db: Db;
@@ -20,9 +21,14 @@ export interface RuntimeDeps {
   binder: ToolBinder;
   gate: ApprovalGate;
   delivery: ReplyDelivery;
+  conversations: Pick<ConversationService, "releaseQueued">;
   log: Logger;
   maxSteps: number;
 }
+
+/** Runs que existen para contestar mensajes. Rutinas y secuencias llevan su propia instrucción. */
+const NOT_INBOUND = new Set(["routine", "sequence"]);
+const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
 
 /** Flush de deltas de texto al bus: cada DELTA_FLUSH_MS o DELTA_FLUSH_CHARS, lo que llegue antes. */
 const DELTA_FLUSH_MS = 120;
@@ -39,6 +45,14 @@ export class AgentRuntime {
 
   /** Arranca un run en cola o lo retoma desde su checkpoint si un reintento lo encontró RUNNING. */
   async execute(workspaceId: string, runId: string, attempt = 0): Promise<void> {
+    try {
+      await this.executeInner(workspaceId, runId, attempt);
+    } finally {
+      await this.drainIfTerminal(workspaceId, runId);
+    }
+  }
+
+  private async executeInner(workspaceId: string, runId: string, attempt: number): Promise<void> {
     const claimed = await this.d.runs.claim(workspaceId, runId, "QUEUED");
     const run = await this.d.runs.load(workspaceId, runId);
     if (!run || !(claimed || (run.status === "RUNNING" && attempt > 0))) return;
@@ -50,7 +64,19 @@ export class AgentRuntime {
     }
     if (claimed) await this.d.runs.publish(run, "run.started", { agentId: run.agentId });
     const checkpoint = fromJson(run.checkpoint);
-    if (checkpoint.length === 0) return this.loop(run, await this.initialMessages(run));
+    if (checkpoint.length === 0) {
+      // Un reintento (attempt > 0) vuelve a ejecutar el bucle: las tools ya hechas se deduplican.
+      // N1 solo aplica al primer arranque, para no cancelar una recuperación con el checkpoint vacío.
+      if (attempt === 0) {
+        const prepared = await this.prepareInbound(run);
+        if (prepared.skip) {
+          await this.d.runs.finish(run, "CANCELLED", { error: "sin mensajes nuevos" });
+          return;
+        }
+        return this.loop(run, prepared.messages);
+      }
+      return this.loop(run, await this.initialMessages(run));
+    }
     if (claimed) return this.loop(run, checkpoint);
     // Recuperación tras caída del worker (reintento o barrido): si murió a mitad de una reanudación, el checkpoint
     // puede terminar en tool-calls aprobadas sin resultado. collect() las completa sin repetir lo ya ejecutado.
@@ -61,6 +87,14 @@ export class AgentRuntime {
 
   /** Reanuda tras las decisiones de aprobación: añade los resultados al historial y continúa. */
   async resume(workspaceId: string, runId: string, attempt = 0): Promise<void> {
+    try {
+      await this.resumeInner(workspaceId, runId, attempt);
+    } finally {
+      await this.drainIfTerminal(workspaceId, runId);
+    }
+  }
+
+  private async resumeInner(workspaceId: string, runId: string, attempt: number): Promise<void> {
     if ((await this.d.db.approval.count({ where: { workspaceId, runId, status: "PENDING" } })) > 0) return;
     const claimed = await this.d.runs.claim(workspaceId, runId, "WAITING_APPROVAL");
     const run = await this.d.runs.load(workspaceId, runId);
@@ -77,7 +111,7 @@ export class AgentRuntime {
     const steps = existingSteps ?? (await StepRecorder.for(this.d.db, run));
     // Latido mientras el run está vivo: el barrido de huérfanos solo reencola runs sin latido reciente (M12).
     const beat = setInterval(() => {
-      this.d.runs.heartbeat(run.id).catch((err: unknown) => this.d.log.warn({ err, runId: run.id }, "latido fallido"));
+      this.d.runs.heartbeat(run.workspaceId, run.id).catch((err: unknown) => this.d.log.warn({ err, runId: run.id }, "latido fallido"));
     }, HEARTBEAT_MS);
     beat.unref();
     try {
@@ -92,13 +126,13 @@ export class AgentRuntime {
         messages,
         tools: this.d.binder.bind(run, resolved, steps, () => stepCount),
         // Cancelación: se comprueba al acabar cada paso, antes de pedir el siguiente al modelo (no se gasta otra llamada).
-        stopWhen: [stepCountIs(Math.max(1, this.d.maxSteps - run.stepCount)), () => this.d.runs.isCancelled(run.id)],
+        stopWhen: [stepCountIs(Math.max(1, this.d.maxSteps - run.stepCount)), () => this.d.runs.isCancelled(run.workspaceId, run.id)],
         abortSignal: abort.signal,
         onStepFinish: async (step) => {
           stepCount += 1;
           await this.d.runs.checkpoint(run.id, [...messages, ...step.response.messages], stepCount);
           await steps.record("llm", { data: { finishReason: step.finishReason, usage: step.usage, text: step.text } });
-          if (await this.d.runs.isCancelled(run.id)) abort.abort(new Error("Run cancelado"));
+          if (await this.d.runs.isCancelled(run.workspaceId, run.id)) abort.abort(new Error("Run cancelado"));
         },
       });
 
@@ -120,11 +154,11 @@ export class AgentRuntime {
         await this.d.runs.finish(run, "FAILED", { error: "Se alcanzó el máximo de pasos sin respuesta final", checkpoint: finalMessages, usage });
         return;
       }
-      if (await this.d.runs.isCancelled(run.id)) return; // cancelado: no se entrega la respuesta
+      if (await this.d.runs.isCancelled(run.workspaceId, run.id)) return; // cancelado: no se entrega la respuesta
       await this.d.delivery.deliver(run, text);
       await this.d.runs.finish(run, "SUCCEEDED", { output: text, checkpoint: finalMessages, usage });
     } catch (err) {
-      if (await this.d.runs.isCancelled(run.id).catch(() => false)) return;
+      if (await this.d.runs.isCancelled(run.workspaceId, run.id).catch(() => false)) return;
       this.d.log.error({ err, runId: run.id }, "run failed");
       await this.d.runs.finish(run, "FAILED", { error: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -167,6 +201,34 @@ export class AgentRuntime {
       now: new Date(),
       memories: memories.map((m) => ({ key: m.key, content: m.content })),
     });
+  }
+
+  /**
+   * N1: un run de mensajes que arranca sin ningún entrante sin reclamar y cuyo último mensaje ya es saliente
+   * no llama al modelo (el run anterior ya contestó). Los mensajes llegados durante una aprobación siguen
+   * con runId null: se reclaman aquí y SÍ se contestan, aunque el saliente de la reanudación sea posterior.
+   */
+  private async prepareInbound(run: RunWithAgent): Promise<{ skip: boolean; messages: ModelMessage[] }> {
+    const messages = await this.initialMessages(run);
+    if (!run.conversationId || NOT_INBOUND.has(run.trigger)) return { skip: false, messages };
+    const claimed = await this.d.db.message.updateMany({
+      where: { workspaceId: run.workspaceId, conversationId: run.conversationId, direction: "INBOUND", runId: null },
+      data: { runId: run.id },
+    });
+    if (claimed.count > 0) return { skip: false, messages };
+    const last = await this.d.db.message.findFirst({
+      where: { workspaceId: run.workspaceId, conversationId: run.conversationId },
+      orderBy: { createdAt: "desc" },
+      select: { direction: true },
+    });
+    return { skip: last?.direction !== "INBOUND", messages };
+  }
+
+  /** Suelta la cola de mensajes solo cuando este run ya está cerrado. */
+  private async drainIfTerminal(workspaceId: string, runId: string): Promise<void> {
+    const run = await this.d.runs.load(workspaceId, runId);
+    if (!run?.conversationId || !TERMINAL.has(run.status)) return;
+    await this.d.conversations.releaseQueued(workspaceId, run.conversationId);
   }
 
   private async initialMessages(run: RunWithAgent): Promise<ModelMessage[]> {

@@ -10,6 +10,8 @@ export class ApprovalService {
     private readonly db: Db,
     private readonly bus: EventBus,
     private readonly queue: JobQueue,
+    /** Barridos que cruzan workspaces (caducidad). El resto de métodos usan `db`, con guarda de tenant. */
+    private readonly systemDb: Db = db,
   ) {}
 
   list(workspaceId: string, status?: ApprovalStatus) {
@@ -56,13 +58,13 @@ export class ApprovalService {
 
   /** Caduca las pendientes vencidas y reanuda los runs afectados (el agente recibe "caducó"). */
   async expireDue(now = new Date()): Promise<number> {
-    const due = await this.db.approval.findMany({
+    const due = await this.systemDb.approval.findMany({
       where: { status: "PENDING", expiresAt: { lte: now } },
       select: { id: true, workspaceId: true, runId: true },
       take: 500,
     });
     if (due.length === 0) return 0;
-    await this.db.approval.updateMany({
+    await this.systemDb.approval.updateMany({
       where: { id: { in: due.map((d) => d.id) }, status: "PENDING" },
       data: { status: "EXPIRED", decidedAt: now },
     });

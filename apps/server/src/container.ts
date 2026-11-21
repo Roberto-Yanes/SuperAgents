@@ -31,6 +31,14 @@ import { ApprovalService } from "./orchestration/approvals/service.js";
 import { AgentService } from "./domain/agents/service.js";
 import { ConnectionService } from "./domain/connections/service.js";
 import { ConversationService } from "./domain/conversations/service.js";
+import { ContactService } from "./domain/contacts/service.js";
+import { AgendaService } from "./domain/agenda/service.js";
+import { LeadService } from "./domain/leads/service.js";
+import { RoutineService } from "./domain/routines/service.js";
+import { SequenceService } from "./domain/sequences/service.js";
+import { TickRoutineScheduler } from "./execution/queue/routine-scheduler.js";
+import { agendaTools } from "./integrations/tools/builtin/agenda.js";
+import { leadTools } from "./integrations/tools/builtin/leads.js";
 import { RunQueryService } from "./domain/runs/service.js";
 
 /**
@@ -55,6 +63,11 @@ export interface AppContext {
   agents: AgentService;
   connections: ConnectionService;
   conversations: ConversationService;
+  contacts: ContactService;
+  agenda: AgendaService;
+  leads: LeadService;
+  routines: RoutineService;
+  sequences: SequenceService;
   runQueries: RunQueryService;
   // orquestación
   llm: LlmResolver;
@@ -92,7 +105,9 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
 
   // Integraciones
   const composioClient = o.composioClient ?? sdkComposioClient;
-  const composio = new ComposioToolProvider(db, secretKeys, composioClient, {
+  const composioKey = env.COMPOSIO_API_KEY ?? null;
+  if (!composioKey) log.warn("Composio deshabilitado: falta COMPOSIO_API_KEY");
+  const composio = new ComposioToolProvider(db, composioKey, composioClient, {
     log: log.child({ component: "composio" }),
     requireVersions: env.NODE_ENV === "production",
   });
@@ -119,33 +134,42 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
       .filter(Boolean),
     allowSignUp: env.AUTH_SIGNUP === "enabled",
   });
-  const apiKeys = new ApiKeyService(db);
+  const apiKeys = new ApiKeyService(tenantDb);
   const principals = new PrincipalResolver({ db, auth, apiKeys });
   const wsTickets = new WsTicketService(db);
 
   // Dominio
   const llmTest = llmTester(fetchImpl);
   const connections = new ConnectionService(
-    db,
+    tenantDb,
     secretKeys,
     {
       "llm.openai": llmTest,
       "llm.anthropic": llmTest,
       "llm.google": llmTest,
       "llm.openai_compatible": llmTest,
-      composio: composioTester(composioClient, env.NODE_ENV === "production"),
+      composio: composioTester(composioKey, composioClient, env.NODE_ENV === "production"),
       "channel.whatsapp_cloud": whatsappCloudTester(fetchImpl),
       "channel.whatsapp_baileys": whatsappBaileysTester(),
     },
     { baseUrlAllowlist: parseAllowlist(env.LLM_BASEURL_ALLOWLIST) },
   );
   const conversations = new ConversationService({ db: tenantDb, bus, queue });
+  const contacts = new ContactService(tenantDb);
+  const agenda = new AgendaService({ db: tenantDb, bus, queue });
+  const leads = new LeadService({ db: tenantDb, bus, queue });
+  const routines = new RoutineService({ db: tenantDb, system: db, queue, scheduler: new TickRoutineScheduler() });
+  const sequences = new SequenceService({ db: tenantDb, queue, conversations });
   const agents = new AgentService(tenantDb, tools);
   const runQueries = new RunQueryService(tenantDb);
+  if (!o.tools) {
+    for (const t of agendaTools(agenda)) tools.register(t);
+    for (const t of leadTools(leads)) tools.register(t);
+  }
 
   // Orquestación
   const llm = o.llm ?? new ConnectionLlmResolver(db, secretKeys, parseAllowlist(env.LLM_BASEURL_ALLOWLIST));
-  const runs = new RunStore(db, bus);
+  const runs = new RunStore(tenantDb, bus);
   const binder = new ToolBinder({ db: tenantDb, bus, log: log.child({ component: "tools" }) }); // las tools reciben el cliente con guarda
   const gate = new ApprovalGate({ db, bus, tools, binder, ttlHours: env.APPROVAL_TTL_HOURS });
   const delivery = new ReplyDelivery({ db: tenantDb, bus, queue });
@@ -158,10 +182,11 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
     binder,
     gate,
     delivery,
+    conversations,
     log: log.child({ component: "runtime" }),
     maxSteps: env.RUN_MAX_STEPS,
   });
-  const approvals = new ApprovalService(db, bus, queue);
+  const approvals = new ApprovalService(tenantDb, bus, queue, db);
 
   return {
     env,
@@ -178,11 +203,17 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
     agents,
     connections,
     conversations,
+    contacts,
+    agenda,
+    leads,
+    routines,
+    sequences,
     runQueries,
     llm,
     runtime,
-    runControl: new RunControl({ db, runs }),
-    sweeper: new RunSweeper({ db, queue, runs, log: log.child({ component: "sweeper" }) }),
+    runControl: new RunControl({ db: tenantDb, runs, conversations }),
+    // El barrido cruza workspaces a propósito: cliente de sistema. Al dar un run por perdido, suelta la cola (D1).
+    sweeper: new RunSweeper({ db, queue, runs, conversations, log: log.child({ component: "sweeper" }) }),
     approvals,
     tools,
     channels,

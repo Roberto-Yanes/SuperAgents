@@ -30,6 +30,11 @@ const Env = z.object({
   RUN_MAX_STEPS: z.coerce.number().int().min(1).default(12),
   /** Archivos y sesiones de Baileys (volumen persistente en Docker). */
   DATA_DIR: z.string().default("./data"),
+  /**
+   * Una sola API key de Composio por servidor (D2 / ADR-014). No se acepta por workspace ni por conexión.
+   * Si falta, Composio queda deshabilitado: no hay tools y /ready lo informa. Nunca se loguea el valor.
+   */
+  COMPOSIO_API_KEY: z.string().min(10).optional(),
 });
 
 export type Env = z.infer<typeof Env>;

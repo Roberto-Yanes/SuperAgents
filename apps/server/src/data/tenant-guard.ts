@@ -8,6 +8,7 @@ export const TENANT_MODELS = new Set([
   "Connection",
   "Agent",
   "Contact",
+  "ContactIdentity",
   "Conversation",
   "Message",
   "Run",

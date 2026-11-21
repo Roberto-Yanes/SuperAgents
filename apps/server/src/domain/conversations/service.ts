@@ -19,7 +19,11 @@ export interface InboundInput {
 export type InboundResult =
   | { status: "run_queued"; messageId: string; runId: string }
   | { status: "duplicate"; messageId: string | null }
-  | { status: "human_handling"; messageId: string };
+  | { status: "human_handling"; messageId: string }
+  /** Hay un run esperando aprobación: el mensaje se guarda y no se llama al modelo. */
+  | { status: "queued_behind_approval"; messageId: string }
+  /** Ya hay un run QUEUED o RUNNING: este mensaje lo verá ese run (o el que se abra al terminar). */
+  | { status: "coalesced"; messageId: string };
 
 export class ConversationService {
   constructor(private readonly d: { db: Db; bus: EventBus; queue: JobQueue }) {}
@@ -43,7 +47,11 @@ export class ConversationService {
 
   /**
    * Punto único de entrada de mensajes (UI vía API y canales vía channel.inbound):
-   * guarda el mensaje (deduplicado por channelMessageId), respeta el takeover humano y crea + encola el run.
+   * guarda el mensaje (deduplicado por channelMessageId) y respeta el takeover humano.
+   *
+   * D1 + N1: si la conversación tiene un run WAITING_APPROVAL, QUEUED o RUNNING, el mensaje se guarda
+   * y no se crea otro run (así dos mensajes seguidos no producen dos respuestas ni el agente se contesta).
+   * Al terminar el run en curso, releaseQueued abre un único run con lo que haya quedado sin reclamar.
    */
   async receive(input: InboundInput): Promise<InboundResult> {
     const { db, bus, queue } = this.d;
@@ -59,12 +67,17 @@ export class ConversationService {
       if (dup) return { status: "duplicate", messageId: dup.id };
     }
 
-    const humanHandling = Boolean(conversation.takenOverBy) || conversation.status === "HANDOFF";
     const result = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`conv:${conversation.id}`}, 0))`;
+      const fresh = await tx.conversation.findFirst({
+        where: { id: conversation.id, workspaceId: input.workspaceId },
+        include: { agent: true },
+      });
+      if (!fresh) throw notFound("Conversación");
       const message = await tx.message.create({
         data: {
           workspaceId: input.workspaceId,
-          conversationId: conversation.id,
+          conversationId: fresh.id,
           direction: "INBOUND",
           author: input.author,
           text: input.text,
@@ -72,20 +85,27 @@ export class ConversationService {
           status: "RECEIVED",
         },
       });
-      await tx.conversation.update({ where: { id: conversation.id }, data: { lastInboundAt: new Date() } });
-      if (humanHandling || conversation.agent.status !== "ACTIVE") return { message, run: null };
+      await tx.conversation.update({ where: { id: fresh.id }, data: { lastInboundAt: new Date() } });
+      const humanHandling = Boolean(fresh.takenOverBy) || fresh.status === "HANDOFF" || fresh.agent.status !== "ACTIVE";
+      if (humanHandling) return { message, run: null, hold: "human" as const };
+      const active = await tx.run.findFirst({
+        where: { workspaceId: input.workspaceId, conversationId: fresh.id, status: { in: ["QUEUED", "RUNNING", "WAITING_APPROVAL"] } },
+        select: { status: true },
+      });
+      if (active?.status === "WAITING_APPROVAL") return { message, run: null, hold: "approval" as const };
+      if (active) return { message, run: null, hold: "coalesced" as const };
       const run = await tx.run.create({
         data: {
           workspaceId: input.workspaceId,
-          agentId: conversation.agentId,
-          agentVersion: conversation.agent.version,
-          conversationId: conversation.id,
+          agentId: fresh.agentId,
+          agentVersion: fresh.agent.version,
+          conversationId: fresh.id,
           trigger: input.trigger,
           input: { messageId: message.id },
         },
       });
       await tx.message.update({ where: { id: message.id }, data: { runId: run.id } });
-      return { message, run };
+      return { message, run, hold: null };
     });
 
     await bus.publish({
@@ -97,9 +117,46 @@ export class ConversationService {
     // El contacto respondió: se detienen las secuencias de seguimiento que lo pidan.
     if (input.author === "CONTACT") await this.stopSequences(input.workspaceId, conversation.id, "contact_replied", true);
 
-    if (!result.run) return { status: "human_handling", messageId: result.message.id };
-    await enqueueRun(queue, result.run, "execute");
-    return { status: "run_queued", messageId: result.message.id, runId: result.run.id };
+    if (result.hold === "human") return { status: "human_handling", messageId: result.message.id };
+    if (result.hold === "approval") return { status: "queued_behind_approval", messageId: result.message.id };
+    if (result.hold === "coalesced") return { status: "coalesced", messageId: result.message.id };
+    await enqueueRun(queue, result.run!, "execute");
+    return { status: "run_queued", messageId: result.message.id, runId: result.run!.id };
+  }
+
+  /**
+   * Tras un run terminal: si no queda ninguno activo y hay entrantes sin reclamar, abre UN run.
+   * Cubre la cola de D1 (mensajes llegados durante WAITING_APPROVAL) y el rechazo, la caducidad y el fallo del sweeper.
+   * No hace nada en HANDOFF ni si el agente no está activo.
+   */
+  async releaseQueued(workspaceId: string, conversationId: string): Promise<{ runId: string } | null> {
+    const run = await this.d.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`conv:${conversationId}`}, 0))`;
+      const active = await tx.run.count({
+        where: { workspaceId, conversationId, status: { in: ["QUEUED", "RUNNING", "WAITING_APPROVAL"] } },
+      });
+      if (active > 0) return null;
+      const conv = await tx.conversation.findFirst({ where: { id: conversationId, workspaceId }, include: { agent: true } });
+      if (!conv || conv.status !== "OPEN" || conv.takenOverBy || conv.agent.status !== "ACTIVE") return null;
+      const pending = await tx.message.findFirst({
+        where: { workspaceId, conversationId, direction: "INBOUND", runId: null },
+        select: { id: true },
+      });
+      if (!pending) return null;
+      return tx.run.create({
+        data: {
+          workspaceId,
+          agentId: conv.agentId,
+          agentVersion: conv.agent.version,
+          conversationId,
+          trigger: "queued.release",
+          input: { messageId: pending.id },
+        },
+      });
+    });
+    if (!run) return null;
+    await enqueueRun(this.d.queue, run, "execute");
+    return { runId: run.id };
   }
 
   // ───────────── Inbox y takeover ─────────────

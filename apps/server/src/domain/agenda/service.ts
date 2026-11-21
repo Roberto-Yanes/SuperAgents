@@ -80,7 +80,7 @@ export class AgendaService {
   async slots(workspaceId: string, calendarId: string, range: { from: Date; to: Date }, opts: { durationMinutes?: number; limit?: number } = {}) {
     const cal = await this.getCalendar(workspaceId, calendarId);
     const busy = await this.d.db.appointment.findMany({
-      where: { calendarId, status: "BOOKED", startsAt: { lt: range.to }, endsAt: { gt: range.from } },
+      where: { workspaceId, calendarId, status: "BOOKED", startsAt: { lt: range.to }, endsAt: { gt: range.from } },
       select: { startsAt: true, endsAt: true },
     });
     return availableSlots(rulesOf(cal), busy, range, this.now(), opts);
@@ -106,6 +106,7 @@ export class AgendaService {
     if (cal.bufferMinutes > 0) {
       const near = await this.d.db.appointment.count({
         where: {
+          workspaceId,
           calendarId: cal.id,
           status: "BOOKED",
           startsAt: { lt: new Date(endsAt.getTime() + cal.bufferMinutes * 60_000) },
@@ -144,6 +145,10 @@ export class AgendaService {
       await this.d.queue.send(JOBS.appointmentReminder, { workspaceId, appointmentId: appt.id }, { startAfter: new Date(remindAt) });
     }
     return appt;
+  }
+
+  getAppointment(workspaceId: string, id: string) {
+    return this.d.db.appointment.findFirst({ where: { id, workspaceId } });
   }
 
   async cancel(workspaceId: string, id: string, actor: Actor, reason?: string) {

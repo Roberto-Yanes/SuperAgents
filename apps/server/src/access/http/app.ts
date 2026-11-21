@@ -1,4 +1,4 @@
-import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyBaseLogger, type FastifyError, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
@@ -19,6 +19,13 @@ import { idempotencyPlugin } from "./plugins/idempotency.js";
 import { meRoutes } from "./routes/me.js";
 import { agentRoutes } from "./routes/agents.js";
 import { chatRoutes } from "./routes/chats.js";
+import { conversationRoutes } from "./routes/conversations.js";
+import { contactRoutes } from "./routes/contacts.js";
+import { agendaRoutes } from "./routes/agenda.js";
+import { leadRoutes } from "./routes/leads.js";
+import { routineRoutes } from "./routes/routines.js";
+import { sequenceRoutes } from "./routes/sequences.js";
+import { metricsRoutes } from "./routes/metrics.js";
 import { runRoutes } from "./routes/runs.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { apiKeyRoutes } from "./routes/api-keys.js";
@@ -31,6 +38,8 @@ import websocket from "@fastify/websocket";
 export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: ctx.log.child({ component: "http" }) as FastifyBaseLogger,
+    // N7: el ticket de SSE viaja en la query. Esa petición no se loguea.
+    logController: new LogController({ disableRequestLogging: (req) => /\/v1\/runs\/[^/]+\/events$/.test(req.url.split("?")[0] ?? "") }),
     // L7: confiar solo en los N saltos de proxy configurados (Caddy = 1); 0 = ignorar X-Forwarded-For.
     trustProxy: ctx.env.TRUST_PROXY === 0 ? false : (_addr: string, hop: number) => hop < ctx.env.TRUST_PROXY,
     bodyLimit: 1_048_576,
@@ -122,6 +131,13 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(healthRoutes, { deps: ctx });
   await app.register(agentRoutes, { deps: ctx });
   await app.register(chatRoutes, { deps: ctx });
+  await app.register(conversationRoutes, { deps: ctx });
+  await app.register(contactRoutes, { deps: ctx });
+  await app.register(agendaRoutes, { deps: ctx });
+  await app.register(leadRoutes, { deps: ctx });
+  await app.register(routineRoutes, { deps: ctx });
+  await app.register(sequenceRoutes, { deps: ctx });
+  await app.register(metricsRoutes);
   await app.register(runRoutes, { deps: ctx });
   await app.register(meRoutes, { deps: ctx });
   await app.register(approvalRoutes, { deps: ctx });

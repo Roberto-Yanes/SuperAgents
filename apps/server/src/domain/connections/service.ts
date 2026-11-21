@@ -158,9 +158,10 @@ export function publicConnection(conn: ConnectionRow, publicUrl: string) {
 function parseOrThrow(schema: z.ZodType, value: unknown, field: string): unknown {
   const r = schema.safeParse(value);
   if (!r.success) {
+    const detail = r.error.issues[0]?.message;
     throw invalid(
       `invalid_${field}`,
-      `${field} inválido`,
+      detail ? `${field} inválido: ${detail}` : `${field} inválido`,
       r.error.issues.map((i) => ({ path: i.path.map(String).join("."), message: i.message })),
     );
   }

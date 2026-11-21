@@ -2,6 +2,7 @@ import type { Db } from "../../data/db.js";
 import { audit, type Actor } from "../../data/audit.js";
 import { conflict, notFound } from "../../shared/errors.js";
 import type { RunStore } from "./run-store.js";
+import type { ConversationService } from "../../domain/conversations/service.js";
 
 /**
  * Acciones de una persona sobre un run en curso.
@@ -9,10 +10,13 @@ import type { RunStore } from "./run-store.js";
  * (aborta y no entrega respuesta) y las aprobaciones pendientes quedan rechazadas.
  */
 export class RunControl {
-  constructor(private readonly d: { db: Db; runs: RunStore }) {}
+  constructor(private readonly d: { db: Db; runs: RunStore; conversations?: Pick<ConversationService, "releaseQueued"> }) {}
 
   async cancel(workspaceId: string, runId: string, actor: Actor, reason = "Cancelado por una persona"): Promise<void> {
-    const run = await this.d.db.run.findFirst({ where: { id: runId, workspaceId }, select: { id: true, workspaceId: true, status: true } });
+    const run = await this.d.db.run.findFirst({
+      where: { id: runId, workspaceId },
+      select: { id: true, workspaceId: true, status: true, conversationId: true },
+    });
     if (!run) throw notFound("Run");
     const res = await this.d.db.$transaction(async (tx) => {
       const r = await tx.run.updateMany({
@@ -21,7 +25,7 @@ export class RunControl {
       });
       if (r.count === 1) {
         await tx.approval.updateMany({
-          where: { runId, status: { in: ["PENDING", "APPROVED"] } },
+          where: { workspaceId, runId, status: { in: ["PENDING", "APPROVED"] } },
           data: { status: "REJECTED", reason: "Run cancelado", decidedAt: new Date(), decidedBy: actor.id },
         });
       }
@@ -29,6 +33,7 @@ export class RunControl {
     });
     if (res === 0) throw conflict("run_not_cancellable", `El run ya terminó (${run.status})`);
     await this.d.runs.publish(run, "run.finished", { status: "CANCELLED", error: reason });
+    if (run.conversationId) await this.d.conversations?.releaseQueued(workspaceId, run.conversationId);
     await audit(this.d.db, { workspaceId, actor, action: "run.cancelled", target: `run:${runId}` });
   }
 }

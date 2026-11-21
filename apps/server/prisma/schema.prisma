@@ -92,6 +92,7 @@ model Workspace {
   connections   Connection[]
   agents        Agent[]
   contacts      Contact[]
+  contactIdentities ContactIdentity[]
   conversations Conversation[]
   messages      Message[]
   runs          Run[]
@@ -240,6 +241,7 @@ model Contact {
   updatedAt   DateTime  @updatedAt
 
   conversations Conversation[]
+  identities    ContactIdentity[]
   memories      Memory[]
   leads         Lead[]
   appointments  Appointment[]
@@ -276,9 +278,28 @@ model Conversation {
   appointments Appointment[]
   enrollments  SequenceEnrollment[]
 
-  @@unique([workspaceId, channel, externalThreadId])
+  /// Un hilo por conexión: dos números del mismo workspace no comparten conversación.
+  /// connectionId null (canal api) no choca: en Postgres los NULL de un único son distintos.
+  @@unique([workspaceId, connectionId, externalThreadId])
   @@index([workspaceId, status])
   @@map("conversation")
+}
+
+/// Identidad externa de un contacto en un canal. Única por workspace para que dos
+/// altas simultáneas del mismo WhatsApp no creen dos contactos (N2).
+model ContactIdentity {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId   String    @db.Uuid
+  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  channel     String
+  externalId  String
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, channel, externalId])
+  @@index([workspaceId, contactId])
+  @@map("contact_identity")
 }
 
 enum ConversationStatus {

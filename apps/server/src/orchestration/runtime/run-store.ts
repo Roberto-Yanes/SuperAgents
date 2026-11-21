@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
-import type { Db } from "../../data/db.js";
-import type { Prisma } from "../../data/generated/prisma/client.js";
+import { Prisma, type Db } from "../../data/db.js";
+import { estimateCostUsd } from "../../shared/observability/cost.js";
+import { runsFinished } from "../../shared/observability/metrics.js";
 import type { RunStatus } from "../../data/generated/prisma/enums.js";
 import type { EventBus } from "../../execution/events/bus.js";
 
@@ -41,9 +42,11 @@ export class RunStore {
       if (!run) return false;
       if (run.conversationId) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`conv:${run.conversationId}`}, 0))`;
-        const busy = await tx.run.count({ where: { conversationId: run.conversationId, status: "RUNNING", id: { not: runId } } });
+        const busy = await tx.run.count({
+          where: { workspaceId, conversationId: run.conversationId, status: "RUNNING", id: { not: runId } },
+        });
         if (busy > 0) {
-          const still = await tx.run.count({ where: { id: runId, status: from } });
+          const still = await tx.run.count({ where: { id: runId, workspaceId, status: from } });
           if (still > 0) throw new RunBusyError(runId, run.conversationId);
           return false;
         }
@@ -61,8 +64,11 @@ export class RunStore {
    * Recuperación de un run RUNNING cuyo worker murió: compare-and-set sobre el latido leído.
    * Si dos procesos intentan recuperarlo a la vez (reintento de pg-boss + barrido), solo uno gana.
    */
-  async reclaim(run: { id: string; heartbeatAt: Date | null }): Promise<boolean> {
-    const res = await this.db.run.updateMany({ where: { id: run.id, status: "RUNNING", heartbeatAt: run.heartbeatAt }, data: { heartbeatAt: new Date() } });
+  async reclaim(run: { id: string; workspaceId: string; heartbeatAt: Date | null }): Promise<boolean> {
+    const res = await this.db.run.updateMany({
+      where: { id: run.id, workspaceId: run.workspaceId, status: "RUNNING", heartbeatAt: run.heartbeatAt },
+      data: { heartbeatAt: new Date() },
+    });
     return res.count === 1;
   }
 
@@ -70,13 +76,13 @@ export class RunStore {
     return this.db.run.update({ where: { id: runId }, data: { checkpoint: toJson(messages), stepCount, heartbeatAt: new Date() } });
   }
 
-  async isCancelled(runId: string): Promise<boolean> {
-    return (await this.db.run.count({ where: { id: runId, status: "CANCELLED" } })) > 0;
+  async isCancelled(workspaceId: string, runId: string): Promise<boolean> {
+    return (await this.db.run.count({ where: { id: runId, workspaceId, status: "CANCELLED" } })) > 0;
   }
 
   /** Latido sin checkpoint (pasos largos del modelo). */
-  heartbeat(runId: string): Promise<unknown> {
-    return this.db.run.updateMany({ where: { id: runId, status: "RUNNING" }, data: { heartbeatAt: new Date() } });
+  heartbeat(workspaceId: string, runId: string): Promise<unknown> {
+    return this.db.run.updateMany({ where: { id: runId, workspaceId, status: "RUNNING" }, data: { heartbeatAt: new Date() } });
   }
 
   async finish(
@@ -86,17 +92,20 @@ export class RunStore {
   ): Promise<boolean> {
     // Condicionado: un run ya cerrado (p. ej. cancelado por una persona) no se reescribe.
     const res = await this.db.run.updateMany({
-      where: { id: run.id, status: { notIn: ["SUCCEEDED", "FAILED", "CANCELLED"] } },
+      where: { id: run.id, workspaceId: run.workspaceId, status: { notIn: ["SUCCEEDED", "FAILED", "CANCELLED"] } },
       data: {
         status,
         finishedAt: new Date(),
         output: extra.output ?? null,
         error: extra.error ?? null,
         ...(extra.checkpoint ? { checkpoint: toJson(extra.checkpoint) } : {}),
-        ...(extra.usage ? { usage: mergeUsage(run.usage, extra.usage) } : {}),
+        ...(extra.usage
+          ? { usage: mergeUsage(run.usage, extra.usage), costUsd: new Prisma.Decimal(run.costUsd.toString()).plus(estimateCostUsd(extra.usage)) }
+          : {}),
       },
     });
     if (res.count === 0) return false;
+    runsFinished.inc({ status });
     await this.bus.publish({
       workspaceId: run.workspaceId,
       type: "run.finished",

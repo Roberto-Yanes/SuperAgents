@@ -26,7 +26,7 @@ export const ChatOut = z.object({ id: Id, agentId: Id, channel: z.string(), stat
 
 export const MessageCreate = z.object({ text: z.string().min(1).max(10_000) });
 export const MessageAccepted = z.object({
-  status: z.enum(["run_queued", "duplicate", "human_handling"]),
+  status: z.enum(["run_queued", "duplicate", "human_handling", "queued_behind_approval", "coalesced"]),
   messageId: Id.nullable(),
   runId: Id.nullable(),
 });

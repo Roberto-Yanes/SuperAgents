@@ -18,7 +18,8 @@ access/
     plugins/
       auth.ts             Resuelve el Principal en cada petición; requireScopes()
       idempotency.ts      Idempotency-Key en POST con efectos
-    routes/               Un archivo por recurso: health, agents, chats, runs (+SSE), approvals,
+    routes/               Un archivo por recurso: health, metrics, agents, chats, conversations,
+                          contacts, agenda, leads, routines, sequences, runs (+SSE), approvals,
                           api-keys, connections (+session), ws (tickets + /v1/ws), webhooks (WhatsApp)
 ```
 

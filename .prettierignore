@@ -5,3 +5,5 @@ pnpm-lock.yaml
 packages/sdk/openapi.json
 packages/sdk/src/schema.d.ts
 **/prisma/migrations/**
+docs/spec-v3
+docs/revision-codigo-v2.md

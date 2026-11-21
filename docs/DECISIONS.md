@@ -92,10 +92,14 @@ Todas las correcciones de la revisión externa (C1, H1–H6, M1–M12, L1–L10)
 6. **Dos caras**: las tools son internas por defecto; en conversaciones con contactos solo se ofrecen las marcadas como externas o las que el dueño expone (con suelo `ASK_OWNER` si escriben). El texto del contacto va envuelto en `<mensaje_del_contacto>`.
 7. **Lo que identifica a un cliente lo construye el servidor** (entidad de Composio, workspaceId) y los secretos se cifran ligados a su fila (AAD).
 
-## D-018. Mensajes que llegan mientras un run espera aprobación (⚑ decisión de producto)
+## D-018. Mensajes que llegan mientras un run espera aprobación
 
-Si un run está en `WAITING_APPROVAL` y el contacto escribe otra vez, se crea y ejecuta un run nuevo (el contacto no se queda sin respuesta mientras el dueño decide). El run en espera continúa cuando se decide. La serialización por conversación garantiza que nunca corren a la vez. Alternativa descartada por ahora: encolar el mensaje hasta que se resuelva la aprobación (más coherente, pero el contacto puede esperar horas).
+Decisión de producto del 21/11 (segunda pasada), que sustituye la anterior (crear un run nuevo en cuanto el contacto escribía). El mensaje se guarda y no se llama al modelo hasta que la decisión se aprueba, se rechaza o caduca. Después se reanuda el run en espera y los mensajes acumulados se contestan en un solo run. Detalle en `docs/adr/001-cola-durante-aprobacion.md`.
 
 ## D-019. Guarda multi-tenant en Prisma
 
-Los servicios que atienden a un workspace (conversaciones, agentes, consulta de runs, runtime, tools) reciben un cliente Prisma con una extensión que rechaza consultas masivas (`findMany`, `updateMany`, `count`…) sin `workspaceId` sobre modelos multi-tenant. Los procesos de sistema que cruzan workspaces a propósito (barridos, arranque de sesiones, bus, webhooks por id de conexión) usan el cliente sin guarda. Modo `error` en desarrollo y tests, `warn` en producción.
+Los servicios que atienden a un workspace (conversaciones, contactos, agentes, conexiones, API keys, consulta de runs, agenda, leads, rutinas, secuencias, runtime, tools, aprobaciones por workspace, RunStore y RunControl) reciben un cliente Prisma con una extensión que rechaza consultas masivas (`findMany`, `updateMany`, `count`…) sin `workspaceId` sobre modelos multi-tenant. Los procesos de sistema que cruzan workspaces a propósito (barrido de runs, caducidad de aprobaciones, tick de rutinas, arranque de sesiones, bus, webhooks por id de conexión, recifrado de secretos) usan el cliente sin guarda. Modo `error` en desarrollo y tests, `warn` en producción.
+
+## D-020. Una sola API key de Composio por servidor
+
+`COMPOSIO_API_KEY` es del proceso, no de la conexión ni del workspace. Si falta, Composio queda deshabilitado. Detalle en `docs/adr/002-composio-una-key.md`.

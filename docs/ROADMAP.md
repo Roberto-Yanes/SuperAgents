@@ -2,7 +2,7 @@
 
 Orden pensado para tener un piloto vendible cuanto antes. ✅ = hecho (21/11/2026).
 
-Pendiente de los módulos hechos: plantillas de WhatsApp aprobadas para escribir fuera de la ventana de 24 h; alta guiada de Cloud API (Embedded Signup) al aprobar Tech Provider; triggers de Composio → `integration.event`. Cada módulo entra con: tabla y migración, servicio de dominio, rutas con esquemas zod, job si aplica, tests y README de su capa actualizado.
+Hecho en la segunda pasada: inbox y takeover (4), agenda con recordatorio (6, sin Google Calendar), leads (7, sin el adaptador `crm.sync`), secuencias y rutinas con sus workers (8) y coste por run más `/metrics` (11). Composio (5) ejecuta la lista blanca con una sola key de servidor; los triggers siguen pendientes. Siguen fuera: RAG (9), plantillas por rubro (10), plantillas de WhatsApp fuera de la ventana de 24 h, Embedded Signup y `integration.event`.
 
 | #        | Módulo                  | Capa               | Qué incluye                                                                                    | Depende de          |
 | -------- | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- | ------------------- |

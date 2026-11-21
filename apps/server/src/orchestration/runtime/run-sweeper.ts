@@ -2,6 +2,7 @@ import type { Logger } from "pino";
 import type { Db } from "../../data/db.js";
 import { enqueueRun, type JobQueue } from "../../execution/queue/jobs.js";
 import type { RunStore } from "./run-store.js";
+import type { ConversationService } from "../../domain/conversations/service.js";
 
 export interface SweepResult {
   recovered: number;
@@ -21,7 +22,18 @@ export interface SweepResult {
  * Tras `maxRecoveries` reencolados el run se marca FAILED para no entrar en bucle.
  */
 export class RunSweeper {
-  constructor(private readonly d: { db: Db; queue: JobQueue; runs: RunStore; log: Logger; staleMs?: number; maxRecoveries?: number }) {}
+  constructor(
+    private readonly d: {
+      db: Db;
+      queue: JobQueue;
+      runs: RunStore;
+      log: Logger;
+      staleMs?: number;
+      maxRecoveries?: number;
+      /** Si el run se da por perdido, los mensajes encolados detrás de él no se quedan huérfanos (D1). */
+      conversations?: Pick<ConversationService, "releaseQueued">;
+    },
+  ) {}
 
   async sweep(now = new Date()): Promise<SweepResult> {
     const staleMs = this.d.staleMs ?? 10 * 60_000;
@@ -38,7 +50,7 @@ export class RunSweeper {
 
     for (const run of candidates) {
       if (run.status === "WAITING_APPROVAL") {
-        const pending = await this.d.db.approval.count({ where: { runId: run.id, status: "PENDING" } });
+        const pending = await this.d.db.approval.count({ where: { workspaceId: run.workspaceId, runId: run.id, status: "PENDING" } });
         if (pending > 0) continue; // espera legítima a una persona
       }
       // Condicionado al estado y latido leídos: si otro proceso tocó el run entre medias, no se hace nada.
@@ -49,6 +61,7 @@ export class RunSweeper {
         if (res.count === 1) {
           result.failed += 1;
           await this.d.runs.publish(run, "run.finished", { status: "FAILED", error });
+          if (run.conversationId) await this.d.conversations?.releaseQueued(run.workspaceId, run.conversationId);
           this.d.log.warn({ runId: run.id, from: run.status }, "run huérfano marcado FAILED");
         }
         continue;

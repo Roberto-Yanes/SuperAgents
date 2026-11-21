@@ -13,12 +13,13 @@
 
 ### Variables de seguridad
 
-| Variable                | Por defecto                   | Para qué                                                                                                                                         |
-| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `TRUST_PROXY`           | 1                             | Saltos de proxy de confianza (Caddy = 1). Pon 0 si expones el puerto 3000 directamente: si no, `X-Forwarded-For` falsearía la IP del rate limit. |
-| `AUTH_SIGNUP`           | disabled                      | Alta pública en `/api/auth/sign-up`. Déjalo cerrado y crea usuarios con `add-user`.                                                              |
-| `LLM_BASEURL_ALLOWLIST` | (vacío)                       | Hosts permitidos como `baseURL` de conexiones LLM, p. ej. `ollama,api.mistral.ai`. Siempre se bloquean metadatos de nube y link-local.           |
-| `TENANT_GUARD`          | error (dev/test), warn (prod) | Guarda que detecta consultas masivas sin `workspaceId` en los servicios por workspace.                                                           |
+| Variable                | Por defecto                   | Para qué                                                                                                                                          |
+| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRUST_PROXY`           | 1                             | Saltos de proxy de confianza (Caddy = 1). Pon 0 si expones el puerto 3000 directamente: si no, `X-Forwarded-For` falsearía la IP del rate limit.  |
+| `AUTH_SIGNUP`           | disabled                      | Alta pública en `/api/auth/sign-up`. Déjalo cerrado y crea usuarios con `add-user`.                                                               |
+| `LLM_BASEURL_ALLOWLIST` | (vacío)                       | Hosts permitidos como `baseURL` de conexiones LLM, p. ej. `ollama,api.mistral.ai`. Siempre se bloquean metadatos de nube y link-local.            |
+| `TENANT_GUARD`          | error (dev/test), warn (prod) | Guarda que detecta consultas masivas sin `workspaceId` en los servicios por workspace.                                                            |
+| `COMPOSIO_API_KEY`      | (vacío = deshabilitado)       | Una sola key de proyecto de Composio por servidor. No va en la conexión ni en la UI. Si falta, `/ready` dice `composio: disabled` y no hay tools. |
 
 Modelos locales (opcional): `docker compose -f docker/compose.yaml --profile local-llm up -d` y crear una conexión `llm.openai_compatible` con `baseURL` `http://ollama:11434/v1`.
 

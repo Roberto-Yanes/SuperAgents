@@ -51,7 +51,8 @@ export const JobPayloads = {
   [JOBS.runResume]: z.object({ workspaceId: z.string().uuid(), runId: z.string().uuid() }),
   [JOBS.messageOutbound]: z.object({ workspaceId: z.string().uuid(), messageId: z.string().uuid() }),
   [JOBS.sequenceStep]: z.object({ workspaceId: z.string().uuid(), enrollmentId: z.string().uuid(), step: z.number().int().min(0) }),
-  [JOBS.routineCron]: z.object({ workspaceId: z.string().uuid(), routineId: z.string().uuid() }),
+  /** Vacío = pase de todas las rutinas vencidas. Con ids, dispara una (el cron por fila también puede usarlo). */
+  [JOBS.routineCron]: z.object({ workspaceId: z.string().uuid().optional(), routineId: z.string().uuid().optional() }),
   [JOBS.crmSync]: z.object({ workspaceId: z.string().uuid(), leadId: z.string().uuid() }),
   [JOBS.integrationEvent]: z.object({
     workspaceId: z.string().uuid(),

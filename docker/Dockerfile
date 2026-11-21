@@ -21,6 +21,6 @@ COPY --from=build /out ./
 RUN useradd --system --uid 10001 ega && mkdir -p /app/data && chown -R ega /app
 USER ega
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=5s CMD node -e "const p=process.env.PORT||3000;fetch('http://127.0.0.1:'+p+'/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 # prisma (dependencia de producción) aplica las migraciones pendientes al arrancar
 CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node --enable-source-maps dist/main.js"]

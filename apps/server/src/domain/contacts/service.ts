@@ -41,16 +41,22 @@ export class ContactService {
   }
 
   async create(workspaceId: string, input: ContactInput, actor: Actor) {
-    const contact = await this.db.contact.create({
-      data: {
-        workspaceId,
-        name: input.name ?? null,
-        email: input.email ?? null,
-        phone: input.phone ?? null,
-        tags: input.tags ?? [],
-        attributes: (input.attributes ?? {}) as Prisma.InputJsonValue,
-        externalIds: { ...(input.email ? { email: input.email } : {}), ...(input.phone ? { whatsapp: input.phone.replace(/\D/g, "") } : {}) },
-      },
+    const contact = await this.db.$transaction(async (tx) => {
+      const row = await tx.contact.create({
+        data: {
+          workspaceId,
+          name: input.name ?? null,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          tags: input.tags ?? [],
+          attributes: (input.attributes ?? {}) as Prisma.InputJsonValue,
+          externalIds: { ...(input.email ? { email: input.email } : {}), ...(input.phone ? { whatsapp: input.phone.replace(/\D/g, "") } : {}) },
+        },
+      });
+      for (const ident of identitiesOf(input)) {
+        await tx.contactIdentity.create({ data: { workspaceId, contactId: row.id, channel: ident.channel, externalId: ident.externalId } });
+      }
+      return row;
     });
     await audit(this.db, { workspaceId, actor, action: "contact.created", target: `contact:${contact.id}` });
     return contact;
@@ -96,29 +102,60 @@ export class ContactService {
   }
 }
 
-/** Busca el contacto por su id en un canal (p. ej. número de WhatsApp) o lo crea. */
+function identitiesOf(input: { email?: string; phone?: string }): Array<{ channel: string; externalId: string }> {
+  const out: Array<{ channel: string; externalId: string }> = [];
+  if (input.email) out.push({ channel: "email", externalId: input.email });
+  const digits = input.phone?.replace(/\D/g, "");
+  if (digits) out.push({ channel: "whatsapp", externalId: digits });
+  return out;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string }).code === "P2002";
+}
+
 /**
- * Busca o crea el contacto por su id de canal. El teléfono solo se guarda si el canal lo da explícitamente
- * (input.phone) o si el externalId de WhatsApp es un número; un LID ("lid:...") nunca se toma por teléfono (L9).
+ * Busca o crea el contacto por su id de canal. La fila ContactIdentity es única por
+ * (workspace, canal, id): dos altas a la vez no crean dos contactos; el perdedor relee.
+ * El teléfono solo se guarda si el canal lo da explícitamente (input.phone) o si el externalId
+ * de WhatsApp es un número; un LID ("lid:...") nunca se toma por teléfono (L9).
  */
 export async function upsertContactByChannel(db: Db, input: { workspaceId: string; channel: string; externalId: string; phone?: string; name?: string }) {
-  const existing = await db.contact.findFirst({
-    where: { workspaceId: input.workspaceId, externalIds: { path: [input.channel], equals: input.externalId } },
-  });
-  if (existing) {
-    const patch = {
-      ...(!existing.name && input.name ? { name: input.name } : {}),
-      ...(!existing.phone && input.phone ? { phone: input.phone } : {}),
-    };
-    return Object.keys(patch).length ? db.contact.update({ where: { id: existing.id }, data: patch }) : existing;
+  const phone = input.phone ?? (input.channel === "whatsapp" && /^\d{6,15}$/.test(input.externalId) ? input.externalId : undefined);
+  try {
+    return await db.$transaction(async (tx) => {
+      const ident = await tx.contactIdentity.findUnique({
+        where: { workspaceId_channel_externalId: { workspaceId: input.workspaceId, channel: input.channel, externalId: input.externalId } },
+        include: { contact: true },
+      });
+      if (ident) {
+        const patch = {
+          ...(!ident.contact.name && input.name ? { name: input.name } : {}),
+          ...(!ident.contact.phone && phone ? { phone } : {}),
+        };
+        return Object.keys(patch).length ? tx.contact.update({ where: { id: ident.contact.id }, data: patch }) : ident.contact;
+      }
+      const contact = await tx.contact.create({
+        data: {
+          workspaceId: input.workspaceId,
+          name: input.name ?? null,
+          phone: phone ?? null,
+          email: input.channel === "email" ? input.externalId : null,
+          externalIds: { [input.channel]: input.externalId },
+        },
+      });
+      await tx.contactIdentity.create({
+        data: { workspaceId: input.workspaceId, contactId: contact.id, channel: input.channel, externalId: input.externalId },
+      });
+      return contact;
+    });
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    const ident = await db.contactIdentity.findUnique({
+      where: { workspaceId_channel_externalId: { workspaceId: input.workspaceId, channel: input.channel, externalId: input.externalId } },
+      include: { contact: true },
+    });
+    if (!ident) throw err;
+    return ident.contact;
   }
-  return db.contact.create({
-    data: {
-      workspaceId: input.workspaceId,
-      name: input.name ?? null,
-      phone: input.phone ?? (input.channel === "whatsapp" && /^\d{6,15}$/.test(input.externalId) ? input.externalId : null),
-      email: input.channel === "email" ? input.externalId : null,
-      externalIds: { [input.channel]: input.externalId },
-    },
-  });
 }

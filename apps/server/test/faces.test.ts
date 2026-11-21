@@ -179,7 +179,6 @@ describe("H5/M8 · Composio", () => {
       {
         kind: "composio",
         name: "c",
-        secret: { apiKey: "k-1234567890" },
         config: {
           tools: [{ slug: "GMAIL_FETCH_EMAILS" }, { slug: "ODOO_BROKEN" }, { slug: "HOLDED_LIST_INVOICES", exposure: "external" }],
           toolkitVersions: { gmail: "20250909_00" },
@@ -188,12 +187,14 @@ describe("H5/M8 · Composio", () => {
       systemActor,
     );
     const fake = client({ GMAIL_FETCH_EMAILS: { toolkit: "gmail" }, ODOO_BROKEN: new Error("404"), HOLDED_LIST_INVOICES: { toolkit: "holded" } });
-    const dev = await new ComposioToolProvider(ctx.db, ctx.secretKeys, () => fake).toolsForWorkspace(ws.id);
+    const dev = await new ComposioToolProvider(ctx.db, "server-key-test", () => fake).toolsForWorkspace(ws.id);
     expect(dev.map((t) => [t.name, t.exposure])).toEqual([
       ["composio.gmail_fetch_emails", "internal"],
       ["composio.holded_list_invoices", "external"],
     ]);
-    const prod = await new ComposioToolProvider(ctx.db, ctx.secretKeys, () => fake, { requireVersions: true }).toolsForWorkspace(ws.id);
+    const prod = await new ComposioToolProvider(ctx.db, "server-key-test", () => fake, { requireVersions: true }).toolsForWorkspace(ws.id);
+    const off = await new ComposioToolProvider(ctx.db, null, () => fake).toolsForWorkspace(ws.id);
+    expect(off).toEqual([]);
     expect(prod.map((t) => t.name)).toEqual(["composio.gmail_fetch_emails"]); // holded sin versión: omitida
   });
 

@@ -85,6 +85,7 @@ export const runRoutes: FastifyPluginAsyncZod<{ deps: RunDeps }> = async (app, {
     "/v1/runs/:id/events",
     {
       // M6: EventSource no puede enviar cabeceras → ?ticket= (POST /v1/ws/tickets, un solo uso, 60 s).
+      // N7: buildApp no loguea esta ruta, así el ticket de la query no queda en los logs.
       preHandler: [
         async (req) => {
           const ticket = (req.query as { ticket?: string }).ticket;

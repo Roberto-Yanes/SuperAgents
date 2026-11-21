@@ -26,7 +26,7 @@ const MIN_INTERVAL_MS = 15 * 60_000;
 
 /** Rutinas: el agente ejecuta una instrucción según un cron en la zona horaria del workspace (o la indicada). */
 export class RoutineService {
-  constructor(private readonly d: { db: Db; queue: JobQueue; scheduler: RoutineScheduler }) {}
+  constructor(private readonly d: { db: Db; system: Db; queue: JobQueue; scheduler: RoutineScheduler }) {}
 
   list(workspaceId: string) {
     return this.d.db.routine.findMany({ where: { workspaceId }, orderBy: { createdAt: "asc" } });
@@ -99,11 +99,32 @@ export class RoutineService {
     return { runId: run.id };
   }
 
-  /** Reprograma todas las rutinas activas (al arrancar el worker). */
+  /** Reprograma todas las rutinas activas (al arrancar el worker). Cruza workspaces: usa el cliente de sistema. */
   async scheduleAll(): Promise<number> {
-    const routines = await this.d.db.routine.findMany({ where: { enabled: true } });
+    const routines = await this.d.system.routine.findMany({ where: { enabled: true } });
     for (const r of routines) await this.d.scheduler.schedule(r);
     return routines.length;
+  }
+
+  /**
+   * Dispara las rutinas cuya ocurrencia anterior aún no se ejecutó. Un pase, no se pone al día
+   * de varias ocurrencias perdidas. Lo llama el job routine.cron cada minuto.
+   */
+  async tick(now = new Date()): Promise<number> {
+    const routines = await this.d.system.routine.findMany({ where: { enabled: true }, include: { agent: true } });
+    let fired = 0;
+    for (const r of routines) {
+      if (r.agent.status !== "ACTIVE") continue;
+      let prev: Date;
+      try {
+        prev = CronExpressionParser.parse(r.cron, { tz: r.timezone, currentDate: now }).prev().toDate();
+      } catch {
+        continue;
+      }
+      if (r.lastRunAt && r.lastRunAt >= prev) continue;
+      if (await this.fire(r.workspaceId, r.id)) fired += 1;
+    }
+    return fired;
   }
 
   private async assertRefs(workspaceId: string, agentId: string, conversationId?: string): Promise<void> {

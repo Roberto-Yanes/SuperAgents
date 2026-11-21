@@ -1,7 +1,6 @@
 import { Composio } from "@composio/core";
 import { z } from "zod";
 import type { Db } from "../../data/db.js";
-import { decryptJson } from "../../shared/security/crypto.js";
 import type { Logger } from "pino";
 import { effectiveApproval, type ToolProvider } from "../tools/registry.js";
 import type { ToolDef, ToolExposure, ToolRisk } from "../tools/types.js";
@@ -13,7 +12,7 @@ import type { ApprovalMode } from "../../data/generated/prisma/enums.js";
  * expuestas como ToolDef. Pasan por las MISMAS reglas que las tools internas: scope, riesgo, aprobación y
  * registro en RunStep.
  *
- * - La API key de Composio vive solo en backend (Connection "composio", cifrada).
+ * - La API key de Composio es una por servidor (COMPOSIO_API_KEY). La conexión solo guarda la lista blanca.
  * - Una entidad de Composio por workspace, construida en servidor: composioUserId(workspaceId).
  * - Cara: las acciones son internas salvo que la config diga exposure: "external" o el agente las exponga.
  * - DELETE/REMOVE siempre con aprobación ALWAYS (ningún override lo baja).
@@ -87,10 +86,12 @@ const CACHE_TTL_MS = 10 * 60_000;
 export class ComposioToolProvider implements ToolProvider {
   readonly prefix = "composio.";
   private readonly cache = new Map<string, { at: number; tools: ToolDef[] }>();
+  private warnedDisabled = false;
 
   constructor(
     private readonly db: Db,
-    private readonly keys: Buffer[],
+    /** Key de proyecto, una por servidor. null = Composio deshabilitado. Nunca se loguea. */
+    private readonly apiKey: string | null,
     private readonly clientFactory: ComposioClientFactory = sdkComposioClient,
     private readonly opts: { log?: Logger; requireVersions?: boolean } = {},
   ) {}
@@ -98,11 +99,17 @@ export class ComposioToolProvider implements ToolProvider {
   async toolsForWorkspace(workspaceId: string): Promise<ToolDef[]> {
     const cached = this.cache.get(workspaceId);
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.tools;
+    if (!this.apiKey) {
+      if (!this.warnedDisabled) {
+        this.warnedDisabled = true;
+        this.opts.log?.warn("Composio deshabilitado: falta COMPOSIO_API_KEY");
+      }
+      return [];
+    }
     const conn = await this.db.connection.findFirst({ where: { workspaceId, kind: "composio", status: { not: "DISABLED" } } });
-    if (!conn?.secretEnc) return [];
-    const { apiKey } = decryptJson<{ apiKey: string }>(conn.secretEnc, this.keys, `connection:${conn.id}`);
+    if (!conn) return [];
     const config = conn.config as unknown as ComposioConfig;
-    const client = this.clientFactory(apiKey);
+    const client = this.clientFactory(this.apiKey);
     const userId = composioUserId(workspaceId);
     const tools: ToolDef[] = [];
     for (const entry of config.tools ?? []) {
@@ -163,9 +170,9 @@ export function defaultApproval(slug: string, risk: ToolRisk): ApprovalMode {
   return risk === "read" ? "NEVER" : "ASK_OWNER";
 }
 
-export function composioTester(clientFactory: ComposioClientFactory = sdkComposioClient, requireVersions = false): ConnectionTester {
-  return async (conn, rawSecret) => {
-    const { apiKey } = rawSecret as { apiKey: string };
+export function composioTester(apiKey: string | null, clientFactory: ComposioClientFactory = sdkComposioClient, requireVersions = false): ConnectionTester {
+  return async (conn) => {
+    if (!apiKey) return { ok: false, message: "Composio deshabilitado: falta COMPOSIO_API_KEY en el servidor" };
     const config = conn.config as unknown as ComposioConfig;
     const client = clientFactory(apiKey);
     const missing: string[] = [];

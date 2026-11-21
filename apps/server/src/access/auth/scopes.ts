@@ -14,6 +14,14 @@ export const SCOPES = [
   "connections:write",
   "contacts:read",
   "contacts:write",
+  "agenda:read",
+  "agenda:write",
+  "leads:read",
+  "leads:write",
+  "routines:read",
+  "routines:write",
+  "sequences:read",
+  "sequences:write",
   "events:read",
   "api_keys:write",
 ] as const;
@@ -30,6 +38,12 @@ const OPERATOR = new Set<Scope>([
   // M5: sin approvals:write. Aprobar acciones con efectos (enviar, borrar, pagar) es cosa de OWNER/ADMIN.
   "contacts:read",
   "contacts:write",
+  "agenda:read",
+  "agenda:write",
+  "leads:read",
+  "leads:write",
+  "routines:read",
+  "sequences:read",
   "events:read",
 ]);
 

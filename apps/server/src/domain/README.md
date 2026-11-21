@@ -13,4 +13,4 @@ domain/
   runs/service.ts           Consultas de runs para la API
 ```
 
-Siguientes módulos (con su tabla, servicio, rutas y job): `leads/` (embudo), `appointments/` (agenda y turnos), `sequences/` (secuencias de seguimiento), `routines/` (cron por agente), `templates/` (plantillas por rubro), `knowledge/` (base de conocimiento).
+Módulos con servicio, rutas y (donde aplica) job: `contacts/`, `conversations/` (inbox), `leads/`, `agenda/`, `sequences/` (`sequence.step`), `routines/` (`routine.cron`). Siguen sin cablear: `templates/` y `knowledge/` (RAG).

@@ -44,7 +44,22 @@ export const CONNECTION_KINDS = {
         toolkitVersions: z.record(z.string(), z.string()).default({}),
       })
       .strict(),
-    secret: z.object({ apiKey: z.string().min(10) }).strict(),
+    /**
+     * La API key es del servidor (COMPOSIO_API_KEY), no de la conexión. Cualquier apiKey aquí se rechaza
+     * para que no quede cifrada por workspace.
+     */
+    secret: z
+      .object({ apiKey: z.string().optional() })
+      .strict()
+      .superRefine((value, ctx) => {
+        if (value.apiKey !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "La API key de Composio es única por servidor (COMPOSIO_API_KEY) y no se acepta ni se guarda en la conexión.",
+          });
+        }
+      })
+      .transform(() => ({})),
   },
   "channel.whatsapp_cloud": {
     config: z

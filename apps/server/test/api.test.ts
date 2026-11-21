@@ -124,7 +124,13 @@ describe("contrato", () => {
   });
   it("health y ready", async () => {
     expect((await app.inject({ method: "GET", url: "/health" })).json()).toEqual({ status: "ok" });
-    expect((await app.inject({ method: "GET", url: "/ready" })).json()).toEqual({ status: "ready", db: true, bus: true, queue: true });
+    expect((await app.inject({ method: "GET", url: "/ready" })).json()).toEqual({
+      status: "ready",
+      db: true,
+      bus: true,
+      queue: true,
+      composio: "disabled",
+    });
   });
 });
 
