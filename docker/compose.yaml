@@ -1,0 +1,62 @@
+# Everglow Agentes — despliegue MVP (VPS, PC o mini PC). Corre 24/7 aunque no haya UI abierta.
+name: everglow-agentes
+
+services:
+  server:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      ROLE: all # api · ws · workers · canales en un proceso
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes:
+      - files:/app/data # archivos y sesión de Baileys (cifrar en reposo)
+    networks: [internal, edge]
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ega
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ega
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ega -d ega"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal] # sin puertos publicados
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?define DOMAIN en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [server]
+    networks: [edge]
+
+  # Opcional: modelos locales. Activar con: docker compose --profile local-llm up -d
+  ollama:
+    image: ollama/ollama
+    profiles: [local-llm]
+    restart: unless-stopped
+    volumes: [ollama:/root/.ollama]
+    networks: [internal]
+
+volumes:
+  pgdata:
+  files:
+  caddy_data:
+  ollama:
+
+networks:
+  internal: { internal: true }
+  edge: {}

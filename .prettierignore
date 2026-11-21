@@ -1,0 +1,7 @@
+node_modules
+dist
+**/generated/**
+pnpm-lock.yaml
+packages/sdk/openapi.json
+packages/sdk/src/schema.d.ts
+**/prisma/migrations/**

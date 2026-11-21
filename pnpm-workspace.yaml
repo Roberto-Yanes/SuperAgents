@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+onlyBuiltDependencies:
+  - "@prisma/engines"
+  - prisma
+  - esbuild
+# Scripts de instalación revisados y no necesarios (L6): baileys solo comprueba Node ≥ 20 y protobufjs solo avisa
+# del esquema de versiones. Se ignoran de forma explícita para que pnpm no avise en cada instalación.
+ignoredBuiltDependencies:
+  - baileys
+  - protobufjs

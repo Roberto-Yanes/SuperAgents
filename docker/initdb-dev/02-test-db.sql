@@ -1,0 +1,1 @@
+CREATE DATABASE ega_test;

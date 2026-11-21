@@ -1,0 +1,29 @@
+{
+  "name": "everglow-agentes",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @ega/server dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @ega/server test",
+    "check": "pnpm typecheck && pnpm lint && pnpm lint:arch && pnpm format:check && pnpm test",
+    "db:migrate": "pnpm --filter @ega/server db:migrate",
+    "openapi": "pnpm --filter @ega/server openapi && pnpm --filter @ega/sdk generate",
+    "lint": "eslint .",
+    "lint:arch": "depcruise apps/server/src --config .dependency-cruiser.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "dependency-cruiser": "^18.8.0",
+    "eslint": "^10.15.0",
+    "prettier": "^3.10.1",
+    "typescript-eslint": "^8.73.0"
+  }
+}

@@ -1,0 +1,788 @@
+// Everglow Agentes — esquema base (arquitectura v3).
+// Regla: toda entidad de negocio lleva workspaceId (pasar a multitenant es un switch, no una reescritura).
+// Excepciones: tablas de Better Auth (User, Session, Account, Verification) y Event.seq global.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/data/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Identidad (Better Auth) ─────────────────────────
+
+model User {
+  id            String       @id
+  name          String
+  email         String       @unique
+  emailVerified Boolean      @default(false)
+  image         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  memberships   Membership[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ───────────────────────── Workspace y acceso ─────────────────────────
+
+model Workspace {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  slug      String   @unique
+  timezone  String   @default("Europe/Madrid")
+  status    WorkspaceStatus @default(ACTIVE)
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships   Membership[]
+  apiKeys       ApiKey[]
+  connections   Connection[]
+  agents        Agent[]
+  contacts      Contact[]
+  conversations Conversation[]
+  messages      Message[]
+  runs          Run[]
+  runSteps      RunStep[]
+  approvals     Approval[]
+  memories      Memory[]
+  routines      Routine[]
+  events        Event[]
+  idempotency   IdempotencyRecord[]
+  auditLogs     AuditLog[]
+  wsTickets     WsTicket[]
+  pipelineStages PipelineStage[]
+  leads          Lead[]
+  calendars      Calendar[]
+  appointments   Appointment[]
+  sequences      Sequence[]
+  enrollments    SequenceEnrollment[]
+  knowledgeDocs  KnowledgeDocument[]
+  knowledgeChunks KnowledgeChunk[]
+  files          StoredFile[]
+
+  @@map("workspace")
+}
+
+enum WorkspaceStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model Membership {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        MemberRole
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("membership")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  OPERATOR
+}
+
+/// API keys con scopes. Solo se guarda el hash (sha256) y un prefijo visible.
+model ApiKey {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  prefix      String    @unique
+  hash        String    @unique
+  scopes      String[]
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@map("api_key")
+}
+
+/// Credenciales de terceros del workspace (LLM, Composio, WhatsApp, SMTP...). Secretos cifrados con AES-256-GCM.
+model Connection {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  workspaceId String           @db.Uuid
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind        String           // llm.openai | llm.anthropic | llm.google | llm.openai_compatible | composio | channel.whatsapp_baileys | channel.whatsapp_cloud | channel.email
+  name        String
+  config      Json             @default("{}")
+  secretEnc   Bytes?
+  status      ConnectionStatus @default(PENDING)
+  lastError   String?
+  /// Estado operativo del conector (p. ej. último UID leído por IMAP). No contiene secretos.
+  state       Json             @default("{}")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, kind])
+  @@map("connection")
+}
+
+enum ConnectionStatus {
+  PENDING
+  OK
+  ERROR
+  DISABLED
+}
+
+// ───────────────────────── Agentes ─────────────────────────
+
+model Agent {
+  id           String      @id @default(uuid(7)) @db.Uuid
+  workspaceId  String      @db.Uuid
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String
+  role         String      @default("assistant") // assistant | coordinator (orquestador, post-MVP)
+  instructions String
+  /// "<connectionName>:<modelId>", p. ej. "openai-main:gpt-5-mini". Resuelto por la capa LLM.
+  model        String
+  /// Nombres de tools habilitadas y overrides de aprobación: { tools: string[], approvals: { [tool]: "NEVER" | "ASK_OWNER" } }
+  toolConfig   Json        @default("{}")
+  settings     Json        @default("{}") // maxSteps, temperature, ...
+  status       AgentStatus @default(ACTIVE)
+  version      Int         @default(1)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  conversations Conversation[]
+  runs          Run[]
+  memories      Memory[]
+  routines      Routine[]
+
+  @@index([workspaceId])
+  @@map("agent")
+}
+
+enum AgentStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+// ───────────────────────── Dominio: contactos y conversaciones ─────────────────────────
+
+model Contact {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String?
+  phone       String?
+  email       String?
+  /// Identificadores por canal: { "whatsapp": "34600000000", "email": "x@y.com" }
+  externalIds Json      @default("{}")
+  tags        String[]
+  attributes  Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  conversations Conversation[]
+  memories      Memory[]
+  leads         Lead[]
+  appointments  Appointment[]
+  enrollments   SequenceEnrollment[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, phone])
+  @@index([workspaceId, email])
+  @@map("contact")
+}
+
+model Conversation {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  workspaceId      String             @db.Uuid
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentId          String             @db.Uuid
+  agent            Agent              @relation(fields: [agentId], references: [id])
+  contactId        String?            @db.Uuid
+  contact          Contact?           @relation(fields: [contactId], references: [id])
+  channel          String             // api | whatsapp | email | instagram
+  /// Conexión del canal por la que entra y sale (null = canal "api"). Decide el adaptador de salida.
+  connectionId     String?            @db.Uuid
+  externalThreadId String?
+  status           ConversationStatus @default(OPEN)
+  /// Usuario que tomó la conversación (takeover). Mientras exista, el agente no responde.
+  takenOverBy      String?
+  /// Último mensaje entrante: base de la ventana de 24 h de WhatsApp.
+  lastInboundAt    DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  messages     Message[]
+  runs         Run[]
+  appointments Appointment[]
+  enrollments  SequenceEnrollment[]
+
+  @@unique([workspaceId, channel, externalThreadId])
+  @@index([workspaceId, status])
+  @@map("conversation")
+}
+
+enum ConversationStatus {
+  OPEN
+  HANDOFF
+  CLOSED
+}
+
+model Message {
+  id               String           @id @default(uuid(7)) @db.Uuid
+  workspaceId      String           @db.Uuid
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversationId   String           @db.Uuid
+  conversation     Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction        MessageDirection
+  author           MessageAuthor
+  text             String?
+  payload          Json             @default("{}")
+  /// Id del mensaje en el canal (wamid, Message-ID...). Deduplica entradas y salidas.
+  channelMessageId String?
+  /// Salidas: estado del outbox.
+  status           MessageStatus    @default(RECEIVED)
+  runId            String?          @db.Uuid
+  /// Clave de idempotencia de las salidas generadas por el sistema, p. ej. "reply:<runId>" (H4).
+  idempotencyKey   String?
+  /// Momento en que un worker lo tomó para enviar (estado SENDING). Arrendamiento: pasado el plazo, se da por caído.
+  sendingAt        DateTime?
+  createdAt        DateTime         @default(now())
+
+  @@unique([workspaceId, conversationId, channelMessageId])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, conversationId, createdAt])
+  @@map("message")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageAuthor {
+  CONTACT
+  AGENT
+  HUMAN
+  SYSTEM
+}
+
+enum MessageStatus {
+  RECEIVED
+  QUEUED
+  /// Tomado por un worker para enviarlo (H4).
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  /// Se cortó a mitad de envío (caída o timeout): puede haber llegado o no. No se reenvía solo.
+  UNKNOWN
+}
+
+// ───────────────────────── Ejecución: runs, pasos y aprobaciones ─────────────────────────
+
+model Run {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  workspaceId    String       @db.Uuid
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentId        String       @db.Uuid
+  agent          Agent        @relation(fields: [agentId], references: [id])
+  agentVersion   Int
+  conversationId String?      @db.Uuid
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  trigger        String       // api.chat | channel.inbound | routine | sequence | test
+  status         RunStatus    @default(QUEUED)
+  input          Json         @default("{}")
+  /// Checkpoint: historial de mensajes del modelo (ModelMessage[]) tras el último paso completado.
+  checkpoint     Json         @default("[]")
+  stepCount      Int          @default(0)
+  output         String?
+  usage          Json         @default("{}")
+  /// Coste estimado en USD (tokens × precio configurado en la conexión LLM).
+  costUsd        Decimal      @default(0) @db.Decimal(12, 6)
+  /// Run padre cuando un coordinador delega una tarea (orquestador multiagente).
+  parentRunId    String?      @db.Uuid
+  parentToolCallId String?
+  error          String?
+  startedAt      DateTime?
+  /// Latido del worker que lo ejecuta (claim y cada checkpoint). Lo usa el barrido de huérfanos (M12).
+  heartbeatAt    DateTime?
+  /// Veces que el barrido lo reencoló tras perder al worker; al llegar al máximo se marca FAILED.
+  recoveries     Int          @default(0)
+  finishedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  steps     RunStep[]
+  approvals Approval[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, conversationId])
+  @@index([status, heartbeatAt])
+  @@map("run")
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model RunStep {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  runId       String    @db.Uuid
+  run         Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  index       Int
+  kind        String    // llm | tool_call | tool_result | approval | note
+  toolName    String?
+  toolCallId  String?
+  /// Huella de una llamada a tool con efectos (paso + tool + argumentos): evita repetirla al recuperar un run (H3).
+  dedupeKey   String?
+  data        Json      @default("{}")
+  createdAt   DateTime  @default(now())
+
+  @@unique([runId, index])
+  @@unique([runId, dedupeKey])
+  @@index([workspaceId, runId])
+  @@map("run_step")
+}
+
+/// Acción que espera decisión del dueño. Persistida; vence sola (expiresAt).
+model Approval {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  workspaceId    String         @db.Uuid
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  runId          String         @db.Uuid
+  run            Run            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  toolName       String
+  toolCallId     String
+  args           Json
+  preview        String
+  mode           ApprovalMode
+  status         ApprovalStatus @default(PENDING)
+  idempotencyKey String         @unique
+  expiresAt      DateTime
+  decidedBy      String?
+  decidedAt      DateTime?
+  reason         String?
+  result         Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([runId, toolCallId])
+  @@index([workspaceId, status])
+  @@map("approval")
+}
+
+enum ApprovalMode {
+  NEVER
+  ASK_OWNER
+  ALWAYS
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  /// Tomada para ejecutar (antes de llamar a la tool). Si el proceso muere aquí, pasa a UNKNOWN (H3).
+  EXECUTING
+  REJECTED
+  EXPIRED
+  EXECUTED
+  FAILED
+  /// No se sabe si la acción llegó a ejecutarse: nunca se repite sola; la revisa una persona.
+  UNKNOWN
+}
+
+// ───────────────────────── Memoria, rutinas ─────────────────────────
+
+/// Hechos por contacto y agente (texto). Los embeddings (pgvector) llegan con el módulo RAG.
+model Memory {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentId     String?   @db.Uuid
+  agent       Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  contactId   String?   @db.Uuid
+  contact     Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  key         String
+  content     String
+  source      String    @default("agent") // agent | human | import
+  embedding   Unsupported("vector")?
+  embeddingModel String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([workspaceId, agentId, contactId, key])
+  @@index([workspaceId, contactId])
+  @@map("memory")
+}
+
+model Routine {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentId     String    @db.Uuid
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  name        String
+  cron        String
+  timezone    String
+  instruction String
+  /// Conversación donde publicar el resultado (opcional; si no, queda en el run y en eventos).
+  conversationId String? @db.Uuid
+  enabled     Boolean   @default(true)
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@map("routine")
+}
+
+// ───────────────────────── Bus de eventos, idempotencia, auditoría ─────────────────────────
+
+/// Bus de eventos: seq global creciente + LISTEN/NOTIFY. Alimenta SSE/WS y auditoría.
+model Event {
+  seq         BigInt    @id @default(autoincrement())
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type        String    // run.started | message.delta | message.completed | tool.called | approval.requested | run.finished ...
+  /// Recurso al que pertenece: "run:<id>", "conversation:<id>"
+  subject     String
+  data        Json      @default("{}")
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, subject, seq])
+  @@map("event")
+}
+
+model IdempotencyRecord {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  workspaceId  String    @db.Uuid
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key          String
+  method       String
+  path         String
+  requestHash  String
+  statusCode   Int?
+  responseBody Json?
+  /// Mientras statusCode es null: plazo de la petición en curso. Vencido = abandonada (caída) y la clave se libera (M4).
+  lockedUntil  DateTime?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+
+  @@unique([workspaceId, key])
+  @@map("idempotency_record")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorType   String    // user | api_key | system
+  actorId     String?
+  action      String
+  target      String?
+  data        Json      @default("{}")
+  ip          String?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@map("audit_log")
+}
+
+/// Ticket de un solo uso para abrir el WebSocket (el navegador no puede enviar cabeceras en el handshake).
+model WsTicket {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  hash        String    @unique
+  actorType   String
+  actorId     String
+  scopes      String[]
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@map("ws_ticket")
+}
+
+// ───────────────────────── Leads y embudo ─────────────────────────
+
+model PipelineStage {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  position    Int
+  kind        StageKind @default(OPEN)
+  createdAt   DateTime  @default(now())
+  leads       Lead[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, position])
+  @@map("pipeline_stage")
+}
+
+enum StageKind {
+  OPEN
+  WON
+  LOST
+}
+
+model Lead {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  workspaceId String        @db.Uuid
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contactId   String        @db.Uuid
+  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  stageId     String        @db.Uuid
+  stage       PipelineStage @relation(fields: [stageId], references: [id])
+  title       String
+  value       Decimal?      @db.Decimal(12, 2)
+  currency    String        @default("EUR")
+  source      String?
+  notes       String?
+  ownerId     String?
+  /// Ids en CRMs externos: { "hubspot": "123" }
+  externalIds Json          @default("{}")
+  syncedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([workspaceId, stageId])
+  @@index([workspaceId, contactId])
+  @@map("lead")
+}
+
+// ───────────────────────── Agenda y turnos ─────────────────────────
+
+model Calendar {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  workspaceId      String        @db.Uuid
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name             String
+  timezone         String
+  slotMinutes      Int           @default(30)
+  bufferMinutes    Int           @default(0)
+  minNoticeMinutes Int           @default(60)
+  maxDaysAhead     Int           @default(30)
+  /// Horario por día ISO (1=lunes..7=domingo): { "1": [["09:00","14:00"],["16:00","20:00"]] }
+  hours            Json          @default("{}")
+  reminderMinutes  Int           @default(1440)
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  appointments     Appointment[]
+
+  @@unique([workspaceId, name])
+  @@map("calendar")
+}
+
+/// Sin solapes: restricción de exclusión (btree_gist) sobre [startsAt, endsAt) por calendario para citas BOOKED (ver migración).
+model Appointment {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  workspaceId      String            @db.Uuid
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  calendarId       String            @db.Uuid
+  calendar         Calendar          @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  contactId        String?           @db.Uuid
+  contact          Contact?          @relation(fields: [contactId], references: [id])
+  conversationId   String?           @db.Uuid
+  conversation     Conversation?     @relation(fields: [conversationId], references: [id])
+  startsAt         DateTime
+  endsAt           DateTime
+  status           AppointmentStatus @default(BOOKED)
+  title            String
+  notes            String?
+  externalEventId  String?
+  reminderSentAt   DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([workspaceId, calendarId, startsAt])
+  @@map("appointment")
+}
+
+enum AppointmentStatus {
+  BOOKED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+// ───────────────────────── Secuencias de seguimiento ─────────────────────────
+
+model Sequence {
+  id          String               @id @default(uuid(7)) @db.Uuid
+  workspaceId String               @db.Uuid
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  /// Pasos: [{ delayMinutes, kind: "message", text } | { delayMinutes, kind: "agent", instruction }]
+  steps       Json
+  stopOnReply Boolean              @default(true)
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  enrollments SequenceEnrollment[]
+
+  @@unique([workspaceId, name])
+  @@map("sequence")
+}
+
+model SequenceEnrollment {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  workspaceId    String           @db.Uuid
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sequenceId     String           @db.Uuid
+  sequence       Sequence         @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  contactId      String?          @db.Uuid
+  contact        Contact?         @relation(fields: [contactId], references: [id])
+  conversationId String           @db.Uuid
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  status         EnrollmentStatus @default(ACTIVE)
+  currentStep    Int              @default(0)
+  nextRunAt      DateTime?
+  stoppedReason  String?
+  lastError      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([conversationId, status])
+  @@map("sequence_enrollment")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  STOPPED
+  FAILED
+}
+
+// ───────────────────────── Base de conocimiento (RAG) ─────────────────────────
+
+model KnowledgeDocument {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  workspaceId String           @db.Uuid
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  source      String           @default("upload")
+  mimeType    String           @default("text/plain")
+  fileId      String?          @db.Uuid
+  status      DocumentStatus   @default(PROCESSING)
+  chunkCount  Int              @default(0)
+  error       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  chunks      KnowledgeChunk[]
+
+  @@index([workspaceId])
+  @@map("knowledge_document")
+}
+
+enum DocumentStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model KnowledgeChunk {
+  id             String                  @id @default(uuid(7)) @db.Uuid
+  workspaceId    String                  @db.Uuid
+  workspace      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  documentId     String                  @db.Uuid
+  document       KnowledgeDocument       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  index          Int
+  content        String
+  embedding      Unsupported("vector")?
+  embeddingModel String?
+  createdAt      DateTime                @default(now())
+
+  @@unique([documentId, index])
+  @@index([workspaceId])
+  @@map("knowledge_chunk")
+}
+
+// ───────────────────────── Archivos ─────────────────────────
+
+model StoredFile {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  mimeType    String
+  size        Int
+  sha256      String
+  storageKey  String    @unique
+  encrypted   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@map("stored_file")
+}

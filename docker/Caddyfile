@@ -1,0 +1,9 @@
+{$DOMAIN} {
+	encode zstd gzip
+	# SSE: sin buffer para que los eventos lleguen al momento
+	@sse path /v1/runs/*/events
+	reverse_proxy @sse server:3000 {
+		flush_interval -1
+	}
+	reverse_proxy server:3000
+}
