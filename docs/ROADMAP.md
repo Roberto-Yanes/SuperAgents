@@ -8,13 +8,14 @@ No hay fechas. El orden es de dependencia. E7 es un candado: no proceses datos r
 
 No lo reabras salvo que un criterio de aceptación de abajo lo pida.
 
-- **Runtime autónomo (22/11/2026):** E1, E2, E3, E4, E5, E7 y E10 cumplen sus criterios, con tests en `test/tasks.test.ts` y `test/runtime-policies.test.ts`. De E8 está la auditoría por tramo y los logs sin ticket; falta exportar y borrar un contacto con sus tareas. Decisiones en DECISIONS D-024.
+- **Runtime autónomo (22/11/2026):** E1, E2, E3, E4, E5, E7 y E10 cumplen sus criterios, con tests en `test/tasks.test.ts` y `test/runtime-policies.test.ts`. Decisiones en DECISIONS D-024.
+- **Componentes sin terceros (22/11/2026):** E6 y E8 completos (`test/knowledge.test.ts`, `test/privacy.test.ts`), archivos cifrados, plantillas por sector (`test/templates.test.ts`), coste con la tarifa de la conexión y `/v1/usage` (`test/usage.test.ts`), copias cifradas. Decisiones en DECISIONS D-025.
 
 - Canal WhatsApp (Baileys y Cloud API), inbox, takeover, respuesta humana.
 - Cola D1: mensajes durante `WAITING_APPROVAL` y un solo run al resolver. N1 evita el doble reply.
 - Composio con una sola key de servidor. Acciones de la lista blanca. Sin triggers (E9).
 - Agenda (sin Google Calendar conectado), leads (sin adaptador `crm.sync`), rutinas y secuencias con worker.
-- Outbox, guarda de tenant, conversación por conexión, identidad de contacto, `/metrics`, costo de referencia por run.
+- Outbox, guarda de tenant, conversación por conexión, identidad de contacto, `/metrics`, costo por run con la tarifa de la conexión (o la de referencia).
 - Aprobaciones que pausan y reanudan.
 
 ## Orden
@@ -88,7 +89,7 @@ Está hecho cuando:
 - **contenido:** una Task produce un borrador y no lo publica sola si publicar es `send`;
 - cancelar la Task deja de gastar cupo y no manda lo que estaba en espera.
 
-## E6. Memoria
+## E6. Memoria — hecho
 
 Está hecho cuando:
 
@@ -111,7 +112,7 @@ Está hecho cuando:
 - al ejecutar, una conexión que ya no cumple la política deja la Task en `BLOCKED` con motivo `model_region` y cero llamadas;
 - un Azure OpenAI en región UE y un Mistral EU de prueba (host permitido, clave ficticia en el test) sí se guardan.
 
-## E8. Auditoría — parcial (falta exportar y borrar un contacto; retención configurable)
+## E8. Auditoría — hecho
 
 Está hecho cuando:
 

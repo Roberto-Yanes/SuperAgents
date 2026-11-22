@@ -7,8 +7,9 @@
  *     El alta pública está cerrada por defecto (AUTH_SIGNUP=disabled).
  *   node dist/cli.js rotate-secrets
  *     Recifra los secretos de todas las conexiones con SECRET_KEY (acepta los cifrados con SECRET_KEY_OLD y el
- *     formato antiguo sin AAD). Pasos: nueva clave en SECRET_KEY, la vieja en SECRET_KEY_OLD, ejecutar, quitar la vieja.
+ *     formato antiguo sin AAD) y los archivos del vault. Pasos: nueva clave en SECRET_KEY, la vieja en SECRET_KEY_OLD, ejecutar, quitar la vieja.
  */
+import path from "node:path";
 import { parseArgs } from "node:util";
 import { env } from "./shared/config/env.js";
 import { createDb } from "./data/db.js";
@@ -16,6 +17,8 @@ import { ApiKeyService } from "./access/auth/api-keys.js";
 import { SCOPES } from "./access/auth/scopes.js";
 import { createUserWithPassword } from "./access/auth/better-auth.js";
 import { reencryptAllSecrets } from "./domain/connections/service.js";
+import { reencryptAllFiles } from "./domain/files/service.js";
+import { LocalBlobStore } from "./data/blob-store.js";
 import { randomToken } from "./shared/security/crypto.js";
 
 async function bootstrap(args: string[]): Promise<void> {
@@ -66,8 +69,11 @@ async function rotateSecrets(): Promise<void> {
   const keys = [config.SECRET_KEY, config.SECRET_KEY_OLD].filter((k): k is string => Boolean(k)).map((k) => Buffer.from(k, "base64"));
   const db = createDb(config.DATABASE_URL);
   try {
-    console.log(JSON.stringify(await reencryptAllSecrets(db, keys)));
-    if (config.SECRET_KEY_OLD) console.log("Listo. Ya puedes quitar SECRET_KEY_OLD y reiniciar.");
+    const connections = await reencryptAllSecrets(db, keys);
+    const files = await reencryptAllFiles(db, new LocalBlobStore(path.resolve(config.DATA_DIR, "files")), keys);
+    console.log(JSON.stringify({ connections, files }));
+    if (files.failed > 0) console.log("Hay archivos que no se pudieron recifrar: no quites SECRET_KEY_OLD todavía.");
+    else if (config.SECRET_KEY_OLD) console.log("Listo. Ya puedes quitar SECRET_KEY_OLD y reiniciar.");
   } finally {
     await db.$disconnect();
   }

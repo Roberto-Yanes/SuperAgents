@@ -78,7 +78,11 @@ export class TaskStore {
    * Gasto de un paso del modelo: pasos (1 llamada + sus tools) y costo de referencia.
    * El costo sube también por los ancestros (la hija descuenta del cupo de la padre).
    */
-  async accountStep(task: Task, run: { id: string; workspaceId: string }, step: { steps: number; costUsd: number; usage: unknown }): Promise<void> {
+  async accountStep(
+    task: Task,
+    run: { id: string; workspaceId: string },
+    step: { steps: number; costUsd: number; usage: unknown; model?: string | null },
+  ): Promise<void> {
     const cost = new Prisma.Decimal(step.costUsd);
     await this.d.db.$transaction(async (tx) => {
       await tx.task.updateMany({
@@ -88,7 +92,7 @@ export class TaskStore {
       const current = await tx.run.findFirstOrThrow({ where: { id: run.id, workspaceId: run.workspaceId }, select: { usage: true } });
       await tx.run.updateMany({
         where: { id: run.id, workspaceId: run.workspaceId },
-        data: { costUsd: { increment: cost }, usage: mergeUsageJson(current.usage, step.usage) },
+        data: { costUsd: { increment: cost }, usage: mergeUsageJson(current.usage, step.usage), ...(step.model ? { model: step.model } : {}) },
       });
       let parentId = task.parentTaskId;
       for (let i = 0; parentId && i < MAX_TASK_DEPTH; i++) {

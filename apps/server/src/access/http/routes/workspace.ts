@@ -22,7 +22,12 @@ const RiskPolicyIn = z
   })
   .strict();
 const LlmPolicyIn = z.object({ allowed: z.array(z.enum(LLM_PROVIDERS)).optional(), hosts: z.array(z.string().min(1).max(253)).max(50).optional() }).strict();
-const PoliciesOut = z.object({ riskPolicy: z.unknown(), llmPolicy: z.unknown(), taskLimits: z.unknown() });
+const PoliciesOut = z.object({
+  riskPolicy: z.unknown(),
+  llmPolicy: z.unknown(),
+  taskLimits: z.unknown(),
+  retention: z.object({ contentDays: z.number(), auditDays: z.number() }),
+});
 
 /**
  * Políticas del workspace (E4, E7, E3). Solo endurecen lo que manda la plataforma.

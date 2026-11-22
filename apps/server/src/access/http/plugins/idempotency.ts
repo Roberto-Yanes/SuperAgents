@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fp from "fastify-plugin";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { AppContext } from "../../../container.js";
@@ -38,7 +39,9 @@ export const idempotencyPlugin = fp<{ deps: IdempotencyDeps }>(async (app, { dep
     if (key.length > 200) throw new HttpError(400, "idempotency_key_invalid", "Idempotency-Key demasiado larga");
     const workspaceId = req.principal.workspaceId;
     const path = req.routeOptions.url ?? req.url;
-    const requestHash = sha256Hex(`${req.method} ${path} ${canonicalJson(req.body ?? null)}`);
+    // Cuerpos binarios (subida de archivos): huella de los bytes, no su JSON.
+    const bodyKey = Buffer.isBuffer(req.body) ? `bin:${createHash("sha256").update(req.body).digest("hex")}` : canonicalJson(req.body ?? null);
+    const requestHash = sha256Hex(`${req.method} ${path} ${bodyKey}`);
     const now = new Date();
 
     const existing = await db.idempotencyRecord.findUnique({ where: { workspaceId_key: { workspaceId, key } } });

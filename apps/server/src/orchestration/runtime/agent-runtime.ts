@@ -17,6 +17,7 @@ import { exhausted, limitsOf, PLATFORM_LIMITS, timeUsedMs, type BlockReason } fr
 import { riskPolicyOf } from "../../domain/workspaces/risk-policy.js";
 import { TASK_TOOL_NAMES } from "../../integrations/tools/builtin/tasks.js";
 import { estimateCostUsd } from "../../shared/observability/cost.js";
+import { llmCostUsd, llmTokens } from "../../shared/observability/metrics.js";
 import type { SegmentControl, TaskStore } from "./task-store.js";
 import type { WaitPort } from "../../execution/queue/ports.js";
 import type { TaskAudit } from "./task-audit.js";
@@ -193,7 +194,7 @@ export class AgentRuntime {
       let blocked: BlockReason | null = null;
       const spentInSegment = (all: Array<StepResult<ToolSet>>) => ({
         steps: all.reduce((n, st) => n + 1 + st.toolCalls.length, 0),
-        costUsd: all.reduce((n, st) => n + estimateCostUsd(st.usage), 0),
+        costUsd: all.reduce((n, st) => n + estimateCostUsd(st.usage, resolvedModel.pricing), 0),
       });
       // Techo por tramo: el cupo de la tarea manda; para canal, además, RUN_MAX_STEPS.
       const segmentCap = taskMode ? PLATFORM_LIMITS.maxSteps : Math.max(1, this.d.maxSteps - run.stepCount);
@@ -220,7 +221,16 @@ export class AgentRuntime {
           stepCount += 1;
           await this.d.runs.checkpoint(run.id, [...messages, ...step.response.messages], stepCount);
           await steps.record("llm", { data: { finishReason: step.finishReason, usage: step.usage, text: step.text } });
-          await this.d.tasks.accountStep(task, run, { steps: 1 + step.toolCalls.length, costUsd: estimateCostUsd(step.usage), usage: step.usage });
+          const stepCost = estimateCostUsd(step.usage, resolvedModel.pricing);
+          await this.d.tasks.accountStep(task, run, {
+            steps: 1 + step.toolCalls.length,
+            costUsd: stepCost,
+            usage: step.usage,
+            model: modelInfo?.modelId ?? null,
+          });
+          llmCostUsd.inc({ provider: resolvedModel.provider }, stepCost);
+          llmTokens.inc({ provider: resolvedModel.provider, direction: "input" }, step.usage.inputTokens ?? 0);
+          llmTokens.inc({ provider: resolvedModel.provider, direction: "output" }, step.usage.outputTokens ?? 0);
           await this.d.tasks.publish(task, "task.step", { runId: run.id, step: stepCount, tools: step.toolCalls.map((c) => c.toolName) });
           if (await this.d.runs.isCancelled(run.workspaceId, run.id)) abort.abort(new Error("Run cancelado"));
         },
@@ -359,6 +369,14 @@ export class AgentRuntime {
         })
       : [];
     const limits = limitsOf(task.limits);
+    // Notas del agente (memoria sin contacto): solo en tareas de cara interna, nunca ante un contacto (ADR 003).
+    const notes = taskMode
+      ? await this.d.db.memory.findMany({
+          where: { workspaceId: run.workspaceId, agentId: run.agentId, contactId: null },
+          orderBy: { updatedAt: "desc" },
+          take: 20,
+        })
+      : [];
     return buildSystemPrompt({
       face: faceOf(run),
       agentName: run.agent.name,
@@ -366,6 +384,7 @@ export class AgentRuntime {
       timezone,
       now: new Date(),
       memories: memories.map((m) => ({ key: m.key, content: m.content })),
+      notes: notes.map((m) => ({ key: m.key, content: m.content })),
       ...(taskMode
         ? {
             task: {

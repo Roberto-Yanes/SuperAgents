@@ -5,7 +5,7 @@ integrations/
   tools/
     types.ts       ToolDef: input zod, scope, riesgo, modo de aprobación, conexión requerida, preview, execute
     registry.ts    ToolRegistry: tools internas + proveedores por workspace (ToolProvider); modo de aprobación efectivo
-    builtin/       Tools internas: memory.save, memory.recall, handoff.request, contact.update
+    builtin/       Tools internas: memory.save, memory.recall, handoff.request, contact.update, kb.search (knowledge.ts)
   channels/
     adapter.ts          Interfaz ChannelAdapter, registro por tipo de conexión, canal "api", ventana de 24 h, RetryableChannelError
     whatsapp-cloud.ts   Cloud API oficial: envío, verificación de firma, parseo de webhook, tester

@@ -33,6 +33,8 @@ export interface PromptInput {
   timezone: string;
   now: Date;
   memories: Array<{ key: string; content: string }>;
+  /** Notas de trabajo del agente (capa 3 de la memoria). Solo cara interna. */
+  notes?: Array<{ key: string; content: string }>;
   /** Solo en tareas de cara interna (app, rutina, delegación): reglas del loop y cupo que queda. */
   task?: {
     depth: number;
@@ -70,6 +72,7 @@ export function buildSystemPrompt(input: PromptInput): string {
     `\n# Tu rol: ${input.agentName}\n${input.instructions}`,
     `\n# Contexto\nFecha y hora local (${input.timezone}): ${localNow}`,
     `\n# Lo que sabes del contacto\n${memories}`,
+    ...(input.face === "internal" && input.notes?.length ? [`\n# Tus notas de trabajo\n${input.notes.map((m) => `- ${m.key}: ${m.content}`).join("\n")}`] : []),
     ...(input.task ? [`\n${taskRules(input.task)}`] : []),
   ].join("\n");
 }

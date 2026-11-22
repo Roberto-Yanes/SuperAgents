@@ -23,6 +23,8 @@ export type WorkerDeps = Pick<
   | "sequences"
   | "routines"
   | "agenda"
+  | "knowledge"
+  | "privacy"
 >;
 
 /**
@@ -65,6 +67,16 @@ export async function startWorkers(deps: WorkerDeps): Promise<void> {
   });
   await boss.schedule(JOBS.routineCron, "* * * * *", {});
   await boss.work(JOBS.appointmentReminder, n, (data) => handleAppointmentReminder(deps, data));
+  // Base de conocimiento: embeddings de un documento (solo si el workspace configuró un modelo UE de embeddings).
+  await boss.work(JOBS.knowledgeIngest, 2, async (data) => {
+    await deps.knowledge.embedDocument(data.workspaceId, data.documentId);
+  });
+  // ADR 005: retención. Todos los días a las 03:30 (UTC).
+  await boss.work(JOBS.retentionSweep, 1, async () => {
+    const r = await deps.privacy.retentionSweep();
+    if (r.messages + r.runs + r.tasks + r.audit + r.events > 0) deps.log.info(r, "retención aplicada");
+  });
+  await boss.schedule(JOBS.retentionSweep, "30 3 * * *", {});
   // ADR 003: despertar tareas en espera (plazo, dato del dueño, hija terminada, cupo ampliado). Un tramo nuevo por espera.
   await boss.work(JOBS.taskWake, { concurrency: n, groupConcurrency: 1 }, (data) =>
     deps.runtime.wake(data.workspaceId, data.taskId, data.signal, data.waitToken),

@@ -15,7 +15,13 @@ domain/
   tasks/service.ts          Tareas (ADR 003): crear desde la app, listar, cancelar en cascada, ampliar cupo, mandar un dato
   tasks/limits.ts           Cupos: defaults por puerta, techo de la plataforma, tiempo consumido, qué cupo se agotó
   workspaces/risk-policy.ts Política de riesgo del tenant (read/write/send/money/delete → directo o aprobación); solo endurece
-  workspaces/service.ts     Guardar políticas del workspace (riesgo, modelos UE, cupo por defecto) con auditoría
+  workspaces/service.ts     Guardar políticas del workspace (riesgo, modelos UE, cupo por defecto, retención) con auditoría
+  runs/usage.ts             Consumo agregado (runs, tokens, coste) por día, agente o modelo
+  files/service.ts          Archivos cifrados por archivo (AAD) detrás del puerto BlobStore; recifrado tras rotar la clave
+  knowledge/service.ts      Base de conocimiento: troceo, texto completo + vectores (puerto Embedder), fusión RRF
+  templates/catalog.ts      Plantillas por sector (agente, etapas, agenda, secuencia, rutinas, checklist)
+  templates/service.ts      Aplicar una plantilla al workspace con los servicios de cada módulo
+  privacy/service.ts        RGPD: exportar y borrar un contacto, retención por workspace y barrido diario
 ```
 
-Módulos con servicio, rutas y (donde aplica) job: `contacts/`, `conversations/` (inbox), `leads/`, `agenda/`, `sequences/` (`sequence.step`), `routines/` (`routine.cron`). Siguen sin cablear: `templates/` y `knowledge/` (RAG).
+Módulos con servicio, rutas y (donde aplica) job: `contacts/`, `conversations/` (inbox), `leads/`, `agenda/`, `sequences/` (`sequence.step`), `routines/` (`routine.cron`). También `knowledge/` (`knowledge.ingest`) y `privacy/` (`retention.sweep`).

@@ -100,7 +100,7 @@ def arrow(x1, y1, x2, y2, color=(71, 85, 105), width=4, head=14, dashed=False):
 
 # ---------------- Encabezado ----------------
 d.rectangle((40, 40, 50, 130), fill=(124, 58, 237))
-d.text((72, 38), "Everglow Agentes — Arquitectura y estado de implementación (135 tests) — nov 2026", font=fb(42), fill=INK)
+d.text((72, 38), "Everglow Agentes — Arquitectura y estado de implementación (153 tests) — nov 2026", font=fb(42), fill=INK)
 d.text((72, 98), "Agentes autónomos que reciben un objetivo, planifican y ejecutan · clientes en España (RGPD) · LLM con residencia UE · producto de Everglow, separado de Studio (Galatea)", font=fm(22), fill=MUTED)
 lx = 72; ly = 160
 for k in ["done", "partial", "todo"]:
@@ -183,7 +183,7 @@ RX = LX + LW + 20; RW = 1818 - RX
 box(RX, LY, RW, 140, "Agent runtime base", "Tool calling con checkpoint por paso · caras interna y externa · cancelación · barrido de huérfanos", "done")
 box(RX, LY + 150, RW, 120, "Aprobaciones", "WAITING_APPROVAL · caducan solas · cola de mensajes (D1)", "done", "Con cola D1")
 box(RX, LY + 280, RW, 112, "Riesgo por tenant", "read · write · send · money · delete → directo o aprobación; solo endurece", "done")
-box(RX, LY + 402, RW, 130, "Memoria en 3 capas", "RAG del negocio · memoria del contacto · notas del agente", "partial", "Hechos · falta RAG")
+box(RX, LY + 402, RW, 130, "Memoria en 3 capas", "RAG del negocio · memoria del contacto · notas del agente", "done")
 # LLM BYOK UE
 ly2 = LY + 542
 d.rounded_rectangle((RX, ly2, RX + RW, LY + 730), radius=14, fill=(250, 250, 255), outline=(129, 140, 248), width=3)
@@ -198,7 +198,7 @@ dw = (1818 - X0 - 4 * gap) // 5; dh = 100
 dom = [("Contactos", "CRUD · sin duplicados", "done"), ("Conversaciones", "", "done"), ("Inbox y takeover", "API completa", "done"),
        ("Leads y embudo", "API + tools", "done"), ("Agenda y turnos", "API + tools", "done"),
        ("Tareas y runs", "", "done"), ("Rutinas", "routine.cron por minuto", "done"), ("Secuencias", "Seguimiento", "done"),
-       ("Plantillas por rubro", "", "todo"), ("Base de conocimiento", "RAG", "todo")]
+       ("Plantillas por rubro", "6 sectores · aplicar", "done"), ("Base de conocimiento", "Texto + pgvector · RRF", "done")]
 for i, (t, sb, st) in enumerate(dom):
     box(X0 + (i % 5) * (dw + gap), y + 18 + (i // 5) * (dh + 14), dw, dh, t, sb, st, tsize=21, ssize=17)
 
@@ -246,17 +246,17 @@ box(tx, y + 194, tw_, 78, "Outbox", "Efecto externo sin duplicar", "done", tsize
 # ---------------- 07 Datos y cumplimiento ----------------
 y = 2210; band(y, 170, "07", "Datos y cumplimiento", (13, 148, 136))
 dws = [420, 250, 280, 330]
-xs = X0; items = [("PostgreSQL 16 + pgvector", "Prisma 7 · workspaceId en toda entidad", "done", "pgvector activo · sin tablas RAG"),
+xs = X0; items = [("PostgreSQL 16 + pgvector", "Prisma 7 · workspaceId en toda entidad", "done", None),
                   ("Tenant-guard", "Aislamiento por workspace", "done", None),
-                  ("Archivos", "Disco · sesión Baileys cifrada", "partial", "Sin S3 ni cifrado"),
-                  ("Auditoría RGPD", "Decisión, dato, tool, modelo, región por tramo", "partial", "Falta export/borrado")]
+                  ("Archivos", "Cifrado por archivo · disco", "done", None),
+                  ("Auditoría RGPD", "Por tramo · exportar · borrar · retención", "done", None)]
 for (t, sb, st, nt), w_ in zip(items, dws):
     box(xs, y + 18, w_, 134, t, sb, st, nt); xs += w_ + gap
-box(xs, y + 18, 1818 - xs, 134, "Backups", "pg_dump diario + volúmenes", "todo", "Documentado")
+box(xs, y + 18, 1818 - xs, 134, "Backups", "Diario cifrado + rotación", "done", None)
 
 # ---------------- 08 Infraestructura ----------------
 y = 2400; band(y, 110, "08", "Infraestructura", (71, 85, 105))
-box(X0, y + 14, 1548, 82, "Docker Compose · server (ROLE=all) · postgres + pgvector · caddy (TLS) · ollama opcional", "Imagen única · corre 24/7 en VPS UE", "done", tsize=21, ssize=17)
+box(X0, y + 14, 1548, 82, "Docker Compose · server (ROLE=all) · postgres + pgvector · caddy (TLS) · backup cifrado · ollama opcional", "Imagen única · corre 24/7 en VPS UE", "done", tsize=21, ssize=17)
 
 # ---------------- Columna derecha: externos, observabilidad, seguridad ----------------
 SX = 1870; SW = 490
@@ -281,13 +281,13 @@ def pills(x, y, title, items, color):
         box(x + 14, py, 207, 170, t, nt, st, tsize=20, ssize=16)
 
 pills(SX, 1150, "OBSERVABILIDAD", [("Logs", "done", "pino con redacción"), ("Auditoría", "done", "AuditLog"), ("Métricas", "done", "/metrics"),
-                                   ("Costos", "partial", "Tarifa de referencia, no facturación"), ("Health", "done", "/health · /ready"), ("Tokens", "done", "Uso por run")], (13, 148, 136))
-pills(SX + 255, 1150, "SEGURIDAD", [("Vault", "partial", "Secretos propios"), ("Claves", "done", "AES-256-GCM + rotación"), ("Caras", "done", "Interna / externa"),
+                                   ("Costos", "done", "Tarifa por conexión · /v1/usage"), ("Health", "done", "/health · /ready"), ("Tokens", "done", "Uso por run")], (13, 148, 136))
+pills(SX + 255, 1150, "SEGURIDAD", [("Vault", "done", "Secretos y archivos cifrados"), ("Claves", "done", "AES-256-GCM + rotación"), ("Caras", "done", "Interna / externa"),
                                      ("Firmas", "partial", "Meta sí · Composio no"), ("TLS", "done", "caddy"), ("Rate limit", "done", "Por principal")], (220, 38, 38))
 
 # ---------------- Pie ----------------
 fy = 2535
-d.text((40, fy), "Pendiente prioritario (ROADMAP): RAG y base de conocimiento (E6) · exportar y borrar un contacto (E8) · triggers Composio (integration.event) · crm.sync · plantillas por rubro · backups.", font=fm(19), fill=MUTED)
-d.text((40, fy + 30), "«Sin probar real»: probado con simulaciones. Fuente: docs/ARCHITECTURE.md, ADR-003/004/005, ROADMAP.md · everglow-agentes · v4.1 · 22/11/2026", font=fm(19), fill=MUTED)
+d.text((40, fy), "Pendiente (depende de terceros): email · Instagram · triggers y firma de Composio · crm.sync · plantillas de Meta · Embedded Signup. Post-MVP: ejecutores enchufables.", font=fm(19), fill=MUTED)
+d.text((40, fy + 30), "«Sin probar real»: probado con simulaciones. Fuente: docs/ARCHITECTURE.md, ADR-003/004/005, ROADMAP.md · everglow-agentes · v4.2 · 22/11/2026", font=fm(19), fill=MUTED)
 img.save(OUT, optimize=True)
 print(OUT, img.size)

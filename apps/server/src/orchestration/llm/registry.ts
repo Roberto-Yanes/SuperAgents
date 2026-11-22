@@ -1,10 +1,11 @@
 import { assertAllowedBaseUrl } from "../../shared/security/url-policy.js";
-import type { LanguageModel } from "ai";
+import type { EmbeddingModel, LanguageModel } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 import type { Db } from "../../data/db.js";
 import { decryptJson } from "../../shared/security/crypto.js";
 import { invalid } from "../../shared/errors.js";
+import { pricingOf, type ModelPricing } from "../../shared/observability/cost.js";
 import { assertEuResidency, llmPolicyOf, residencyOf } from "../../domain/connections/llm-residency.js";
 
 /**
@@ -18,6 +19,8 @@ export interface ResolvedModel {
   /** Proveedor y región comprobados (ADR 005). Van a la auditoría de cada tramo. */
   provider: string;
   region: string;
+  /** Tarifa configurada en la conexión (USD / millón de tokens); sin ella, la de referencia. */
+  pricing?: ModelPricing;
 }
 
 export interface LlmResolver {
@@ -35,6 +38,17 @@ export class ConnectionLlmResolver implements LlmResolver {
   ) {}
 
   async resolve(workspaceId: string, modelRef: string): Promise<ResolvedModel> {
+    const { provider, region, modelId, factory, pricing } = await this.open(workspaceId, modelRef);
+    return { model: factory.chatModel(modelId), modelId, provider, region, ...(pricing ? { pricing } : {}) };
+  }
+
+  /** Modelo de embeddings de una conexión UE (base de conocimiento). Misma comprobación de residencia. */
+  async resolveEmbedding(workspaceId: string, modelRef: string): Promise<{ model: EmbeddingModel; provider: string; region: string; modelId: string }> {
+    const { provider, region, modelId, factory } = await this.open(workspaceId, modelRef);
+    return { model: factory.embeddingModel(modelId), modelId, provider, region };
+  }
+
+  private async open(workspaceId: string, modelRef: string) {
     const sep = modelRef.indexOf(":");
     if (sep <= 0) throw invalid("invalid_model", `Modelo inválido: "${modelRef}". Formato: conexión:modelo`);
     const connectionName = modelRef.slice(0, sep);
@@ -50,24 +64,23 @@ export class ConnectionLlmResolver implements LlmResolver {
     const config = Config.parse(conn.config);
     for (const url of [config.baseURL, config.endpoint]) if (url) assertAllowedBaseUrl(url, this.baseUrlAllowlist);
     const secret = conn.secretEnc ? Secret.parse(decryptJson(conn.secretEnc, this.keys, `connection:${conn.id}`)) : {};
-
-    const build = (): LanguageModel => {
+    const factory = (() => {
       switch (conn.kind) {
         case "llm.azure_openai": // API v1 de Azure OpenAI, compatible con OpenAI; la clave va en api-key
           return createOpenAICompatible({
             name: connectionName,
             baseURL: `${config.endpoint!.replace(/\/$/, "")}/openai/v1`,
             headers: { "api-key": secret.apiKey ?? "" },
-          })(modelId);
+          });
         case "llm.mistral":
-          return createOpenAICompatible({ name: connectionName, baseURL: "https://api.mistral.ai/v1", apiKey: secret.apiKey })(modelId);
+          return createOpenAICompatible({ name: connectionName, baseURL: "https://api.mistral.ai/v1", apiKey: secret.apiKey });
         case "llm.openai_compatible": // Ollama / vLLM en la UE (self_hosted o eu_hosted)
-          return createOpenAICompatible({ name: connectionName, baseURL: config.baseURL!, apiKey: secret.apiKey })(modelId);
+          return createOpenAICompatible({ name: connectionName, baseURL: config.baseURL!, apiKey: secret.apiKey });
         default:
           throw invalid("llm_kind_unsupported", `Tipo de conexión LLM no soportado: ${conn.kind}`);
       }
-    };
-    return { model: build(), modelId, provider, region };
+    })();
+    return { provider, region, modelId, factory, pricing: pricingOf(conn.config) };
   }
 }
 
@@ -75,7 +88,7 @@ export class ConnectionLlmResolver implements LlmResolver {
 export class StaticLlmResolver implements LlmResolver {
   constructor(
     private readonly model: LanguageModel | (() => LanguageModel),
-    private readonly info: { provider: string; region: string } = { provider: "test", region: "eu" },
+    private readonly info: { provider: string; region: string; pricing?: ModelPricing } = { provider: "test", region: "eu" },
   ) {}
   async resolve(_workspaceId: string, modelRef: string): Promise<ResolvedModel> {
     return { model: typeof this.model === "function" ? this.model() : this.model, modelId: modelRef, ...this.info };

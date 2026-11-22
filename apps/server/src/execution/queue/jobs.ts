@@ -26,6 +26,8 @@ export const JOBS = {
   knowledgeIngest: "knowledge.ingest",
   /** Despertar una Task en espera (plazo, dato externo, tarea hija o cupo ampliado): abre un tramo nuevo (ADR 003). */
   taskWake: "task.wake",
+  /** Purga diaria de contenido y auditoría vencidos según la retención de cada workspace (ADR 005). */
+  retentionSweep: "retention.sweep",
 } as const;
 
 export type JobName = (typeof JOBS)[keyof typeof JOBS];
@@ -67,7 +69,8 @@ export const JobPayloads = {
   [JOBS.appointmentReminder]: z.object({ workspaceId: z.string().uuid(), appointmentId: z.string().uuid() }),
   [JOBS.approvalsExpire]: z.object({}).passthrough(),
   [JOBS.channelPoll]: z.object({}).passthrough(),
-  [JOBS.knowledgeIngest]: z.object({ workspaceId: z.string().uuid(), documentId: z.string().uuid(), text: z.string() }),
+  [JOBS.knowledgeIngest]: z.object({ workspaceId: z.string().uuid(), documentId: z.string().uuid() }),
+  [JOBS.retentionSweep]: z.object({}).passthrough(),
   [JOBS.taskWake]: z.object({
     workspaceId: z.string().uuid(),
     taskId: z.string().uuid(),

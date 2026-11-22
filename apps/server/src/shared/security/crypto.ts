@@ -54,6 +54,42 @@ function decryptRaw<T>(buf: Buffer, keys: Buffer[], aad?: string): T {
   throw new Error("No se pudo descifrar el secreto con ninguna clave configurada");
 }
 
+/** Prefijo de los binarios cifrados (archivos). */
+const MAGIC_BIN = Buffer.from("EGAB", "ascii");
+
+/** Cifra bytes con AES-256-GCM y AAD obligatorio: "EGAB" | nonce(12) | tag(16) | ciphertext. */
+export function encryptBytes(data: Buffer, key: Buffer, aad: string): Buffer {
+  const nonce = randomBytes(NONCE_BYTES);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  cipher.setAAD(Buffer.from(aad, "utf8"));
+  const ciphertext = Buffer.concat([cipher.update(data), cipher.final()]);
+  return Buffer.concat([MAGIC_BIN, nonce, cipher.getAuthTag(), ciphertext]);
+}
+
+/** Descifra bytes probando cada clave. Falla si el contenido o el AAD no coinciden. */
+export function decryptBytes(blob: Buffer, keys: Buffer[], aad: string): Buffer {
+  if (!blob.subarray(0, MAGIC_BIN.length).equals(MAGIC_BIN)) throw new Error("Formato de archivo cifrado desconocido");
+  const buf = blob.subarray(MAGIC_BIN.length);
+  const nonce = buf.subarray(0, NONCE_BYTES);
+  const tag = buf.subarray(NONCE_BYTES, NONCE_BYTES + TAG_BYTES);
+  const ciphertext = buf.subarray(NONCE_BYTES + TAG_BYTES);
+  for (const key of keys) {
+    try {
+      const decipher = createDecipheriv("aes-256-gcm", key, nonce);
+      decipher.setAAD(Buffer.from(aad, "utf8"));
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    } catch {
+      // probar la siguiente clave
+    }
+  }
+  throw new Error("No se pudo descifrar el archivo con ninguna clave configurada");
+}
+
+export function sha256Bytes(data: Buffer): string {
+  return createHash("sha256").update(data).digest("hex");
+}
+
 export function sha256Hex(input: string): string {
   return createHash("sha256").update(input).digest("hex");
 }

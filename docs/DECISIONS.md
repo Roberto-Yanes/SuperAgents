@@ -128,3 +128,16 @@ Implementa E1–E5, E7, E10 y la parte de runtime de E8 del ROADMAP.
 - **`send` y `money` con aprobación por defecto.** Una tool `send` declarada `NEVER` ahora pide aprobación salvo que un OWNER baje la política. Es el cambio de comportamiento más visible para los agentes existentes.
 - **Proveedores LLM.** `llm.openai`, `llm.anthropic` y `llm.google` quedan como tipos heredados: no se crean, no se reactivan y no se usan. Se quitaron sus SDK; Azure OpenAI (API v1) y Mistral usan el proveedor compatible con OpenAI, sin dependencias nuevas.
 - **Recuperar un run exige un latido viejo (≥ 2 s).** El compare-and-set sobre el latido dejaba ganar a dos procesos si uno leía el valor que el otro acababa de escribir. El barrido deja su marca en el pasado para que el job de recuperación pueda reclamar enseguida.
+
+## D-025. Componentes sin terceros: decisiones (22/11/2026)
+
+Cierra E6 y E8 y los bloques del diagrama v4 que no dependen de un proveedor externo.
+
+- **Archivos.** Los bytes van cifrados (AES-256-GCM, AAD `file:<workspace>:<id>`) en el volumen `files`; en Postgres solo metadatos y sha256. 10 MB por archivo. La rotación de `SECRET_KEY` recifra también los archivos. Un almacén S3 de la UE se puede enchufar detrás de `BlobStore` sin tocar el dominio.
+- **Conocimiento.** Búsqueda en dos vías: texto completo de Postgres (siempre, sin dependencias) y pgvector cuando el workspace configura `settings.knowledge.embeddingModel` con una conexión LLM UE. Se fusionan por RRF (k = 60). Sin modelo de embeddings la base funciona igual solo con texto. Los vectores guardan el modelo que los generó y solo se comparan con el mismo.
+- **Memoria en tres capas.** Contacto (cara externa, ese contacto), notas del agente (`contactId` nulo, solo cara interna y solo en tareas) y conocimiento del negocio (`kb.search`, ambas caras).
+- **Plantillas por sector.** Catálogo en código (clínica dental, estética, inmobiliaria, gestoría, restaurante, taller/SAT). Aplicar crea agente, etapas, agenda, secuencia activa y rutinas desactivadas; el modelo lo elige el dueño (debe ser una conexión UE).
+- **RGPD.** Exportar devuelve JSON con contacto, identidades, conversaciones, memoria, leads, citas y tareas. Borrar es una transacción: conversaciones y mensajes, tareas de canal y sus runs, eventos, memoria, leads, citas y el contacto; las notas del agente que lo nombran se tachan; las tareas de la app solo se desvinculan. La auditoría guarda recuentos, no datos. Retención: 365 días por defecto (ADR 005), el tenant solo la baja (contenido ≥ 1 día, auditoría ≥ 30); los eventos del bus se purgan a los 30 días.
+- **Coste.** Cada conexión LLM puede declarar su tarifa (USD por millón de entrada/salida); sin ella se usa la de referencia. `Run.model` permite agregar por modelo. `/metrics` no lleva etiqueta de workspace (cardinalidad); el detalle por tenant está en `/v1/usage`.
+- **Copias.** `pg_dump` + `tar` del volumen en un solo archivo cifrado con openssl (AES-256, PBKDF2) y rotación por días. Sin herramientas nuevas en la imagen del servidor: el servicio `backup` usa la imagen de Postgres con openssl.
+- **Fuera de este corte** por depender de terceros: email, Instagram, triggers y firma de Composio, `crm.sync`, plantillas de Meta, Embedded Signup. Ejecutores enchufables: post-MVP.

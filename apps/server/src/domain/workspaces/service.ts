@@ -6,6 +6,7 @@ import { DomainError, invalid } from "../../shared/errors.js";
 import { llmPolicyOf, LlmPolicySchema, type LlmPolicy } from "../connections/llm-residency.js";
 import { DEFAULT_RISK_POLICY, loweredRisks, riskPolicyOf, RiskPolicySchema, type RiskPolicy } from "./risk-policy.js";
 import { TaskLimitsPatch, type TaskLimitsInput } from "../tasks/limits.js";
+import { retentionOf } from "../privacy/service.js";
 
 /**
  * Políticas del workspace guardadas en Workspace.settings:
@@ -16,9 +17,12 @@ import { TaskLimitsPatch, type TaskLimitsInput } from "../tasks/limits.js";
 export class WorkspacePolicyService {
   constructor(private readonly db: Db) {}
 
-  async get(workspaceId: string): Promise<{ riskPolicy: RiskPolicy; llmPolicy: LlmPolicy; taskLimits: TaskLimitsInput }> {
+  async get(
+    workspaceId: string,
+  ): Promise<{ riskPolicy: RiskPolicy; llmPolicy: LlmPolicy; taskLimits: TaskLimitsInput; retention: { contentDays: number; auditDays: number } }> {
     const settings = await this.settings(workspaceId);
     return {
+      retention: retentionOf(settings),
       riskPolicy: { ...DEFAULT_RISK_POLICY, ...riskPolicyOf(settings) },
       llmPolicy: llmPolicyOf(settings),
       taskLimits: TaskLimitsPatch.safeParse((settings as { taskLimits?: unknown }).taskLimits ?? {}).data ?? {},

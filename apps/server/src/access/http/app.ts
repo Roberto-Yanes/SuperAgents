@@ -27,6 +27,7 @@ import { routineRoutes } from "./routes/routines.js";
 import { sequenceRoutes } from "./routes/sequences.js";
 import { metricsRoutes } from "./routes/metrics.js";
 import { runRoutes } from "./routes/runs.js";
+import { usageRoutes } from "./routes/usage.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { apiKeyRoutes } from "./routes/api-keys.js";
 import { connectionRoutes } from "./routes/connections.js";
@@ -34,6 +35,10 @@ import { wsRoutes } from "./routes/ws.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { workspaceRoutes } from "./routes/workspace.js";
+import { fileRoutes } from "./routes/files.js";
+import { knowledgeRoutes } from "./routes/knowledge.js";
+import { templateRoutes } from "./routes/templates.js";
+import { privacyRoutes } from "./routes/privacy.js";
 import websocket from "@fastify/websocket";
 
 /** API Gateway (capa 02): REST /v1 + SSE, auth, rate limit, idempotencia y contrato OpenAPI 3.1. */
@@ -141,8 +146,13 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(sequenceRoutes, { deps: ctx });
   await app.register(metricsRoutes);
   await app.register(runRoutes, { deps: ctx });
+  await app.register(usageRoutes, { deps: ctx });
   await app.register(taskRoutes, { deps: ctx });
   await app.register(workspaceRoutes, { deps: ctx });
+  await app.register(fileRoutes, { deps: ctx });
+  await app.register(knowledgeRoutes, { deps: ctx });
+  await app.register(templateRoutes, { deps: ctx });
+  await app.register(privacyRoutes, { deps: ctx });
   await app.register(meRoutes, { deps: ctx });
   await app.register(approvalRoutes, { deps: ctx });
   await app.register(apiKeyRoutes, { deps: ctx });

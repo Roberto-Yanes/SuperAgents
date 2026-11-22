@@ -46,15 +46,50 @@ Modelos locales (opcional): `docker compose -f docker/compose.yaml --profile loc
 
 ## Copias de seguridad
 
-- `pg_dump` diario cifrado fuera del servidor y copia del volumen `files` (archivos y sesión de Baileys, que se guarda cifrada con `SECRET_KEY`).
-- Guardar `SECRET_KEY` aparte de las copias: sin ella no se pueden descifrar las credenciales de las conexiones.
-- Probar una restauración al mes.
+El servicio `backup` del compose (imagen en `docker/backup/`) hace cada día, a `BACKUP_AT` UTC:
+
+1. `pg_dump` en formato custom de la base `ega`.
+2. Un `tar` del volumen `files` (archivos del vault, ya cifrados, y sesiones de Baileys).
+3. Un único `ega-<fecha>.tar.enc` cifrado con AES-256 (openssl, PBKDF2 con 200.000 iteraciones) usando `BACKUP_PASSPHRASE`, más su `.sha256`.
+4. Borra las copias de más de `BACKUP_KEEP_DAYS` días y, si está definido, ejecuta `BACKUP_REMOTE_CMD` con la ruta de la copia.
+
+Las copias quedan en `BACKUP_HOST_DIR` (por defecto `docker/backups/`). Sácalas del servidor a un almacenamiento en la UE (rclone o rsync desde el host, o `BACKUP_REMOTE_CMD`).
+
+- Copia manual: `docker compose exec backup backup.sh`.
+- Guarda `BACKUP_PASSPHRASE` y `SECRET_KEY` fuera del servidor y de las copias. Sin la frase no se abre la copia; sin `SECRET_KEY` no se descifran las credenciales de las conexiones ni los archivos.
+- Una copia que falla queda en los logs del servicio (`[backup] ERROR`) y se reintenta al día siguiente.
+
+### Restaurar
+
+`restore.sh` es destructivo: reemplaza la base y el directorio de archivos destino, y exige `--yes`.
+
+```bash
+docker compose stop server
+# el servicio monta el volumen de archivos en solo lectura; para restaurar se monta en escritura en otra ruta
+docker compose run --rm --entrypoint restore.sh -v everglow-agentes_files:/restore -e DATA_DIR=/restore \
+  backup /backups/ega-<fecha>.tar.enc --yes
+docker compose start server
+```
+
+`--db-only` o `--files-only` restauran solo una parte. El `.sha256` se verifica antes de descifrar.
+
+### Prueba mensual
+
+Restaura en una base aparte para no tocar la de producción:
+
+```bash
+docker compose exec postgres createdb -U ega ega_restore
+docker compose run --rm --entrypoint restore.sh \
+  -e DATABASE_URL=postgresql://ega:<pass>@postgres:5432/ega_restore -e DATA_DIR=/tmp/restore \
+  backup /backups/ega-<fecha>.tar.enc --yes
+docker compose exec postgres dropdb -U ega ega_restore
+```
 
 ## Rotación de `SECRET_KEY`
 
 1. Mover la clave actual a `SECRET_KEY_OLD` y poner una nueva en `SECRET_KEY`.
 2. Reiniciar: se descifra con cualquiera de las dos y se cifra con la nueva.
-3. Recifrar todas las conexiones: `node dist/cli.js rotate-secrets` (también migra los secretos antiguos sin AAD).
+3. Recifrar las conexiones y los archivos del vault: `node dist/cli.js rotate-secrets` (también migra los secretos antiguos sin AAD). Si informa archivos que no pudo recifrar, no quites todavía `SECRET_KEY_OLD`.
 4. Quitar `SECRET_KEY_OLD` y reiniciar. Las sesiones de Baileys se recifran solas la próxima vez que se guardan; para forzarlo, desvincular y volver a vincular.
 
 ## Estados que necesitan una persona

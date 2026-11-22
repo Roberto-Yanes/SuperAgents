@@ -29,6 +29,13 @@ import { TaskStore } from "./orchestration/runtime/task-store.js";
 import { TaskAudit } from "./orchestration/runtime/task-audit.js";
 import { TaskService } from "./domain/tasks/service.js";
 import { WorkspacePolicyService } from "./domain/workspaces/service.js";
+import { FileService } from "./domain/files/service.js";
+import { LocalBlobStore } from "./data/blob-store.js";
+import { KnowledgeService, type EmbedderResolver } from "./domain/knowledge/service.js";
+import { ConnectionEmbedderResolver } from "./orchestration/llm/embeddings.js";
+import { knowledgeTools } from "./integrations/tools/builtin/knowledge.js";
+import { TemplateService } from "./domain/templates/service.js";
+import { PrivacyService } from "./domain/privacy/service.js";
 import { RunSweeper } from "./orchestration/runtime/run-sweeper.js";
 import { RunControl } from "./orchestration/runtime/run-control.js";
 import { ApprovalGate } from "./orchestration/approvals/approval-gate.js";
@@ -45,6 +52,7 @@ import { TickRoutineScheduler } from "./execution/queue/routine-scheduler.js";
 import { agendaTools } from "./integrations/tools/builtin/agenda.js";
 import { leadTools } from "./integrations/tools/builtin/leads.js";
 import { RunQueryService } from "./domain/runs/service.js";
+import { UsageService } from "./domain/runs/usage.js";
 
 /**
  * Raíz de composición: el ÚNICO sitio que construye dependencias concretas (inversión de dependencias).
@@ -77,8 +85,13 @@ export interface AppContext {
   routines: RoutineService;
   sequences: SequenceService;
   runQueries: RunQueryService;
+  usage: UsageService;
   tasks: TaskService;
   workspacePolicies: WorkspacePolicyService;
+  files: FileService;
+  knowledge: KnowledgeService;
+  templates: TemplateService;
+  privacy: PrivacyService;
   // orquestación
   llm: LlmResolver;
   runtime: AgentRuntime;
@@ -100,6 +113,7 @@ export interface ContextOverrides {
   fetch?: typeof fetch;
   composioClient?: ComposioClientFactory;
   baileysFactory?: BaileysSocketFactory;
+  embedders?: EmbedderResolver;
 }
 
 export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
@@ -181,7 +195,11 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
   }
 
   // Orquestación
-  const llm = o.llm ?? new ConnectionLlmResolver(db, secretKeys, parseAllowlist(env.LLM_BASEURL_ALLOWLIST));
+  const files = new FileService({ db: tenantDb, store: new LocalBlobStore(path.resolve(env.DATA_DIR, "files")), keys: secretKeys });
+  const connectionLlm = new ConnectionLlmResolver(db, secretKeys, parseAllowlist(env.LLM_BASEURL_ALLOWLIST));
+  const llm = o.llm ?? connectionLlm;
+  const knowledge = new KnowledgeService({ db: tenantDb, queue, files, embedders: o.embedders ?? new ConnectionEmbedderResolver({ db, llm: connectionLlm }) });
+  if (!o.tools) for (const t of knowledgeTools(knowledge)) tools.register(t);
   const runs = new RunStore(tenantDb, bus);
   const binder = new ToolBinder({ db: tenantDb, bus, log: log.child({ component: "tools" }) }); // las tools reciben el cliente con guarda
   const gate = new ApprovalGate({ db, bus, tools, binder, ttlHours: env.APPROVAL_TTL_HOURS });
@@ -231,10 +249,15 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
     routines,
     sequences,
     runQueries,
+    usage: new UsageService(tenantDb),
     llm,
     runtime,
     tasks,
     workspacePolicies,
+    files,
+    knowledge,
+    privacy: new PrivacyService({ db: tenantDb, system: db }),
+    templates: new TemplateService({ db: tenantDb, agents, leads, agenda, sequences, routines }),
     runControl: new RunControl({ db: tenantDb, runs, conversations, tasks }),
     // El barrido cruza workspaces a propósito: cliente de sistema. Al dar un run por perdido, suelta la cola (D1).
     sweeper: new RunSweeper({ db, queue, runs, conversations, tasks: taskStore, log: log.child({ component: "sweeper" }) }),

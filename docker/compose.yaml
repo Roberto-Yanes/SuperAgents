@@ -31,6 +31,24 @@ services:
       retries: 20
     networks: [internal] # sin puertos publicados
 
+  # Copia diaria cifrada de la base y del volumen de archivos (docker/backup). Restaurar: ver docs/OPERATIONS.md.
+  backup:
+    build: { context: ./backup }
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://ega:${POSTGRES_PASSWORD}@postgres:5432/ega
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?define BACKUP_PASSPHRASE en .env}
+      BACKUP_AT: ${BACKUP_AT:-03:15}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_REMOTE_CMD: ${BACKUP_REMOTE_CMD:-}
+      DATA_DIR: /data
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes:
+      - files:/data:ro
+      - ${BACKUP_HOST_DIR:-./backups}:/backups # sácalas del servidor (rclone/rsync a un almacenamiento UE)
+    networks: [internal]
+
   caddy:
     image: caddy:2
     restart: unless-stopped

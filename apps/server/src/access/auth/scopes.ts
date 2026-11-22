@@ -27,6 +27,17 @@ export const SCOPES = [
   /** Tareas autónomas (ADR 003): lanzar, ver, cancelar, ampliar cupo. */
   "tasks:read",
   "tasks:write",
+  /** Archivos cifrados del workspace y base de conocimiento (RAG). */
+  "files:read",
+  "files:write",
+  "knowledge:read",
+  "knowledge:write",
+  /** Plantillas por rubro (aplicar crea agente, embudo, secuencia y rutinas). */
+  "templates:apply",
+  /** Exportar y borrar los datos de un contacto (RGPD). Solo OWNER/ADMIN. */
+  "privacy:admin",
+  /** Uso y costos. */
+  "usage:read",
   /** Políticas del workspace (riesgo, modelos UE). Solo OWNER/ADMIN; bajar send/money exige OWNER. */
   "workspace:admin",
 ] as const;
@@ -52,6 +63,8 @@ const OPERATOR = new Set<Scope>([
   "events:read",
   "tasks:read",
   "tasks:write",
+  "files:read",
+  "knowledge:read",
 ]);
 
 export function scopesForRole(role: MemberRole): Set<Scope> {

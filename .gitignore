@@ -6,3 +6,4 @@ dist/
 apps/server/src/data/generated/
 coverage/
 *.log
+docker/backups/

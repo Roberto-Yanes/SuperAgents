@@ -385,6 +385,8 @@ model Run {
   usage          Json         @default("{}")
   /// Coste estimado en USD (tokens × precio configurado en la conexión LLM).
   costUsd        Decimal      @default(0) @db.Decimal(12, 6)
+  /// Modelo usado en el tramo ("conexión:modelo"), para el uso agregado por modelo (/v1/usage).
+  model          String?
   /// Tarea a la que pertenece este tramo (ADR 003). Un tramo = una tanda del loop entre esperas.
   taskId         String?      @db.Uuid
   task           Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
@@ -407,6 +409,7 @@ model Run {
   @@index([workspaceId, status])
   @@index([workspaceId, conversationId])
   @@index([status, heartbeatAt])
+  @@index([workspaceId, createdAt])
   @@map("run")
 }
 
