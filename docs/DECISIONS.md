@@ -115,3 +115,16 @@ No se cambia a Temporal hasta que se mida uno de los criterios del `docs/adr/004
 ## D-023. LLM solo con región UE
 
 BYOK, pero el proveedor y la región se validan al guardar y al usar. Azure OpenAI EU, Mistral EU, modelos hospedados en la UE o el servidor propio en la UE. Grok y los endpoints públicos sin región UE se rechazan. “Estilo Grok Bot” en la spec nombra un chat, no ese modelo. Detalle en `docs/adr/005-llm-residencia-ue.md`.
+
+## D-024. Runtime autónomo: decisiones del primer corte (22/11/2026)
+
+Implementa E1–E5, E7, E10 y la parte de runtime de E8 del ROADMAP.
+
+- **Un tramo por espera.** Esperar un dato, una fecha o una hija cierra el run y guarda el checkpoint en la Task; `task.wake` abre un run nuevo desde ahí con una nota de la plataforma. Así la tarea se puede leer en tablas (Task, Run, RunStep, Approval) sin un proceso dormido, como pide el ADR 004. La aprobación sigue siendo el mismo run en `WAITING_APPROVAL` (ADR 001).
+- **Run `BLOCKED`.** Estado nuevo y terminal del tramo cortado por cupo o por política de modelos. No es un fallo; libera la cola D1 como cualquier cierre.
+- **Tareas de canal.** Cada run de una conversación (y de rutinas y secuencias) crea su Task corta al arrancar, en un solo sitio (`TaskStore.ensureTask`). No se tocó `ConversationService.receive`: la cola D1 y el "dos mensajes = una llamada" siguen igual.
+- **Cupo sin depender del orden de callbacks.** El corte se calcula en `stopWhen` con los pasos del propio tramo más lo gastado antes; `onStepFinish` solo persiste. Pasos = llamadas al modelo + llamadas a tools. El costo es la tarifa de referencia por paso y sube también por los ancestros.
+- **Piso de escritura en la cara externa (⚑).** Se aplica a las tools que el dueño expone y a las de proveedores (Composio). Las tools nativas de contacto (`memory.save`, `contact.update`, `handoff.request`, `lead.create`) siguen directas: solo tocan la conversación en curso y pedir aprobación para un handoff dejaría al contacto sin respuesta. Si se quiere el piso estricto del ADR para todo, basta con quitar `nativeExternal` en `risk-policy.ts`.
+- **`send` y `money` con aprobación por defecto.** Una tool `send` declarada `NEVER` ahora pide aprobación salvo que un OWNER baje la política. Es el cambio de comportamiento más visible para los agentes existentes.
+- **Proveedores LLM.** `llm.openai`, `llm.anthropic` y `llm.google` quedan como tipos heredados: no se crean, no se reactivan y no se usan. Se quitaron sus SDK; Azure OpenAI (API v1) y Mistral usan el proveedor compatible con OpenAI, sin dependencias nuevas.
+- **Recuperar un run exige un latido viejo (≥ 2 s).** El compare-and-set sobre el latido dejaba ganar a dos procesos si uno leía el valor que el otro acababa de escribir. El barrido deja su marca en el pasado para que el job de recuperación pueda reclamar enseguida.

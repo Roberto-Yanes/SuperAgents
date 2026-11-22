@@ -4,7 +4,9 @@ import type { Db } from "../../data/db.js";
 import type { EventBus } from "../../execution/events/bus.js";
 import type { ApprovalMode } from "../../data/generated/prisma/enums.js";
 
-export type ToolRisk = "read" | "write" | "send";
+/** Riesgo declarado por la tool. La política del tenant decide si va directo o con aprobación (domain/workspaces/risk-policy.ts). */
+export type { ToolRisk } from "../../domain/workspaces/risk-policy.js";
+import type { ToolRisk } from "../../domain/workspaces/risk-policy.js";
 
 /**
  * Cara en la que se ofrece una tool (H2):
@@ -24,9 +26,30 @@ export interface ToolContext {
   face: ToolExposure;
   /** Clave estable por llamada: úsala para que una escritura externa no se repita. */
   idempotencyKey: string;
+  /** Tarea en curso (ADR 003). null fuera de una tarea. Lo implementa el runtime; las tools no tocan su estado. */
+  task: TaskToolContext | null;
   db: Db;
   bus: EventBus;
   log: Logger;
+}
+
+export interface PlanStep {
+  id: string;
+  title: string;
+  status: "pending" | "doing" | "done" | "skipped";
+  note?: string;
+}
+
+/** Operaciones sobre la tarea en curso que el runtime ofrece a las tools de tarea. */
+export interface TaskToolContext {
+  id: string;
+  depth: number;
+  /** Reescribe el plan (versión nueva). */
+  updatePlan(steps: PlanStep[], note?: string): Promise<{ version: number }>;
+  /** Pide pausar la tarea tras este paso hasta una fecha o hasta que llegue un dato (WAITING_EXTERNAL). */
+  requestWait(wait: { until?: Date; reason: string }): Promise<void>;
+  /** Crea una tarea hija y pide pausar la tarea tras este paso (WAITING_CHILD). */
+  delegate(input: { goal: string; agentId?: string; maxSteps?: number; maxCostUsd?: number }): Promise<{ childTaskId: string; agentId: string }>;
 }
 
 export type ToolResult = { ok: true; [k: string]: unknown } | { ok: false; error: string; retryable?: boolean };

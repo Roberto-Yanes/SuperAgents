@@ -9,6 +9,7 @@ import { ToolRegistry } from "../src/integrations/tools/registry.js";
 import { defineTool, type ToolDef } from "../src/integrations/tools/types.js";
 import { StaticLlmResolver } from "../src/orchestration/llm/registry.js";
 import { RecordingQueue, resetDb, scriptedModel, seedAgent, testContext, type ScriptedTurn } from "./helpers.js";
+import { allowDirectSend } from "./helpers.js";
 
 /** Regresiones de la revisión (bloque outbox): H3 (aprobaciones y tools con efectos) y H4 (envíos). */
 let ctx: AppContext;
@@ -159,7 +160,7 @@ describe("H3 · acciones con efectos que no se repiten", () => {
       await c.runtime.execute(ws.id, runId);
       const approval = await c.db.approval.findFirstOrThrow({ where: { runId } });
       await c.db.approval.update({ where: { id: approval.id }, data: { status: "APPROVED" } });
-      await c.db.run.update({ where: { id: runId }, data: { status: "RUNNING" } }); // como si dos workers recuperaran el run
+      await c.db.run.update({ where: { id: runId }, data: { status: "RUNNING", heartbeatAt: new Date(Date.now() - 120_000) } }); // como si dos workers recuperaran el run
       await Promise.all([c.runtime.execute(ws.id, runId, 1), c.runtime.execute(ws.id, runId, 1)]);
       expect(sent).toEqual(["ana@x.com"]);
     } finally {
@@ -177,10 +178,12 @@ describe("H3 · acciones con efectos que no se repiten", () => {
     const { c } = local(turns, "NEVER");
     try {
       const { ws, runId } = await chat(c);
+      await allowDirectSend(c, ws.id); // E4: send pide aprobación salvo que un OWNER lo baje
       await c.runtime.execute(ws.id, runId);
       expect(sent).toEqual(["ana@x.com"]);
       // Simula la caída antes de guardar el checkpoint: el run vuelve a RUNNING desde el principio.
-      await c.db.run.update({ where: { id: runId }, data: { status: "RUNNING", checkpoint: [], stepCount: 0 } });
+      await c.db.run.update({ where: { id: runId }, data: { status: "RUNNING", checkpoint: [], stepCount: 0, heartbeatAt: new Date(Date.now() - 120_000) } });
+      await c.db.task.updateMany({ where: { workspaceId: ws.id }, data: { status: "RUNNING", finishedAt: null, result: null } }); // la caída fue antes de cerrar la tarea
       await c.runtime.execute(ws.id, runId, 1);
       expect(sent).toEqual(["ana@x.com"]); // no se reenvió
       expect(await c.db.runStep.findFirst({ where: { runId, kind: "note", toolCallId: "c9" } })).toMatchObject({ data: { dedupeOf: "c1", replayed: true } });

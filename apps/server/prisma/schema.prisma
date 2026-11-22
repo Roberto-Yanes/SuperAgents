@@ -96,6 +96,7 @@ model Workspace {
   conversations Conversation[]
   messages      Message[]
   runs          Run[]
+  tasks         Task[]
   runSteps      RunStep[]
   approvals     Approval[]
   memories      Memory[]
@@ -211,6 +212,7 @@ model Agent {
 
   conversations Conversation[]
   runs          Run[]
+  tasks         Task[]
   memories      Memory[]
   routines      Routine[]
 
@@ -241,6 +243,7 @@ model Contact {
   updatedAt   DateTime  @updatedAt
 
   conversations Conversation[]
+  tasks         Task[]
   identities    ContactIdentity[]
   memories      Memory[]
   leads         Lead[]
@@ -275,6 +278,7 @@ model Conversation {
 
   messages     Message[]
   runs         Run[]
+  tasks        Task[]
   appointments Appointment[]
   enrollments  SequenceEnrollment[]
 
@@ -381,6 +385,9 @@ model Run {
   usage          Json         @default("{}")
   /// Coste estimado en USD (tokens × precio configurado en la conexión LLM).
   costUsd        Decimal      @default(0) @db.Decimal(12, 6)
+  /// Tarea a la que pertenece este tramo (ADR 003). Un tramo = una tanda del loop entre esperas.
+  taskId         String?      @db.Uuid
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
   /// Run padre cuando un coordinador delega una tarea (orquestador multiagente).
   parentRunId    String?      @db.Uuid
   parentToolCallId String?
@@ -409,6 +416,81 @@ enum RunStatus {
   WAITING_APPROVAL
   SUCCEEDED
   FAILED
+  CANCELLED
+  /// El tramo se cortó por el cupo de su tarea (pasos, costo, tiempo) o por la política de modelos. No es un fallo.
+  BLOCKED
+}
+
+/// Unidad de trabajo del runtime autónomo (ADR 003): un objetivo con plan, estado, cupo y tramos (runs).
+model Task {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  workspaceId    String       @db.Uuid
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentId        String       @db.Uuid
+  agent          Agent        @relation(fields: [agentId], references: [id])
+  /// Instrucción del dueño (app/rutina/delegación) o del canal. Nunca el texto del contacto.
+  goal           String
+  source         TaskSource
+  /// Quién la lanzó: "user:<id>", "api_key:<id>", "channel", "routine:<id>", "task:<id>".
+  launchedBy     String
+  conversationId String?      @db.Uuid
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  contactId      String?      @db.Uuid
+  contact        Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  parentTaskId   String?      @db.Uuid
+  parent         Task?        @relation("TaskTree", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  children       Task[]       @relation("TaskTree")
+  /// Profundidad de delegación (0 = raíz, máximo 3).
+  depth          Int          @default(0)
+  status         TaskStatus   @default(PLANNING)
+  /// Plan vigente: [{ id, title, status: pending|doing|done|skipped, note? }]. Lo reescribe el agente.
+  plan           Json         @default("[]")
+  planVersion    Int          @default(0)
+  /// Datos de partida que no son instrucción (p. ej. { leadId }). Se muestran al modelo como referencia.
+  context        Json         @default("{}")
+  /// Cupo: { maxSteps, maxCostUsd, maxDurationMs, pauseClockOnWait }.
+  limits         Json
+  spentSteps     Int          @default(0)
+  spentCostUsd   Decimal      @default(0) @db.Decimal(12, 6)
+  /// Tiempo consumido de tramos ya cerrados (ms). El tramo en curso suma desde segmentStartedAt.
+  elapsedMs      Int          @default(0)
+  segmentStartedAt DateTime?
+  /// Historial del modelo al cerrar el último tramo: el siguiente tramo arranca desde aquí.
+  checkpoint     Json         @default("[]")
+  blockedReason  String?      // steps | cost | time | model_region
+  /// Espera vigente: { kind: external|child|timer, until?, reason, token }.
+  waiting        Json?
+  result         String?
+  error          String?
+  startedAt      DateTime     @default(now())
+  finishedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  runs Run[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, conversationId])
+  @@index([parentTaskId])
+  @@map("task")
+}
+
+enum TaskSource {
+  APP
+  CHANNEL
+  ROUTINE
+  DELEGATION
+}
+
+enum TaskStatus {
+  PLANNING
+  RUNNING
+  WAITING_APPROVAL
+  WAITING_EXTERNAL
+  WAITING_CHILD
+  SUCCEEDED
+  FAILED
+  BLOCKED
   CANCELLED
 }
 

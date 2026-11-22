@@ -45,7 +45,7 @@ export const RunOut = z.object({
   agentId: Id,
   conversationId: Id.nullable(),
   trigger: z.string(),
-  status: z.enum(["QUEUED", "RUNNING", "WAITING_APPROVAL", "SUCCEEDED", "FAILED", "CANCELLED"]),
+  status: z.enum(["QUEUED", "RUNNING", "WAITING_APPROVAL", "SUCCEEDED", "FAILED", "CANCELLED", "BLOCKED"]),
   output: z.string().nullable(),
   error: z.string().nullable(),
   stepCount: z.number().int(),
@@ -82,3 +82,79 @@ export const ApiKeyOut = z.object({
 export const ApiKeyCreated = ApiKeyOut.extend({ token: z.string().describe("Solo se muestra una vez") });
 
 export const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+
+// ───────────── Tareas (ADR 003) ─────────────
+
+export const TaskStatusEnum = z.enum([
+  "PLANNING",
+  "RUNNING",
+  "WAITING_APPROVAL",
+  "WAITING_EXTERNAL",
+  "WAITING_CHILD",
+  "SUCCEEDED",
+  "FAILED",
+  "BLOCKED",
+  "CANCELLED",
+]);
+export const TaskSourceEnum = z.enum(["APP", "CHANNEL", "ROUTINE", "DELEGATION"]);
+
+export const TaskLimitsIn = z
+  .object({
+    maxSteps: z.number().int().min(1).max(200).optional(),
+    maxCostUsd: z.number().positive().max(25).optional(),
+    maxDurationMs: z
+      .number()
+      .int()
+      .min(10_000)
+      .max(7 * 24 * 3_600_000)
+      .optional(),
+    pauseClockOnWait: z.boolean().optional(),
+  })
+  .strict();
+
+export const TaskCreateIn = z.object({
+  agentId: Id,
+  goal: z.string().min(1).max(4_000),
+  /** Datos de partida, p. ej. { leadId }. No son instrucciones. */
+  context: z.record(z.string(), z.unknown()).optional(),
+  limits: TaskLimitsIn.optional(),
+});
+
+export const TaskOut = z.object({
+  id: Id,
+  agentId: Id,
+  goal: z.string(),
+  source: TaskSourceEnum,
+  launchedBy: z.string(),
+  status: TaskStatusEnum,
+  conversationId: Id.nullable(),
+  contactId: Id.nullable(),
+  parentTaskId: Id.nullable(),
+  depth: z.number().int(),
+  plan: z.unknown(),
+  planVersion: z.number().int(),
+  context: z.unknown(),
+  limits: z.object({ maxSteps: z.number(), maxCostUsd: z.number(), maxDurationMs: z.number(), pauseClockOnWait: z.boolean() }),
+  spent: z.object({ steps: z.number().int(), costUsd: z.number(), timeMs: z.number() }),
+  blockedReason: z.string().nullable(),
+  waiting: z.unknown().nullable(),
+  result: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.string(),
+  finishedAt: z.string().nullable(),
+  runs: z
+    .array(
+      z.object({
+        id: Id,
+        status: z.string(),
+        trigger: z.string(),
+        stepCount: z.number().int(),
+        costUsd: z.number(),
+        createdAt: z.string(),
+        finishedAt: z.string().nullable(),
+        error: z.string().nullable(),
+      }),
+    )
+    .optional(),
+  children: z.array(z.object({ id: Id, status: TaskStatusEnum, goal: z.string() })).optional(),
+});

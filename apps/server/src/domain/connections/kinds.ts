@@ -5,24 +5,46 @@ import { z } from "zod";
  * Añadir un tipo = añadir una entrada aquí + su tester (connections/testers.ts) + quien la use.
  */
 const ApprovalMode = z.enum(["NEVER", "ASK_OWNER", "ALWAYS"]);
-const Risk = z.enum(["read", "write", "send"]);
+const Risk = z.enum(["read", "write", "send", "money", "delete"]);
 
 export const CONNECTION_KINDS = {
+  /** Azure OpenAI en una región UE (ADR 005). El endpoint tiene que demostrar la región. */
+  "llm.azure_openai": {
+    config: z
+      .object({
+        provider: z.literal("azure_openai").default("azure_openai"),
+        region: z.string().min(2),
+        endpoint: z.string().url(),
+      })
+      .strict(),
+    secret: z.object({ apiKey: z.string().min(10) }).strict(),
+  },
+  /** Mistral La Plateforme, procesamiento en la UE. */
+  "llm.mistral": {
+    config: z.object({ provider: z.literal("mistral").default("mistral"), region: z.literal("eu").default("eu") }).strict(),
+    secret: z.object({ apiKey: z.string().min(10) }).strict(),
+  },
+  /** @deprecated ADR 005: no procesa en la UE. Se conserva para leer filas antiguas; no se puede crear ni usar. */
   "llm.openai": {
     config: z.object({ baseURL: z.string().url().optional() }).strict(),
     secret: z.object({ apiKey: z.string().min(10) }).strict(),
   },
+  /** @deprecated ADR 005 (ídem). */
   "llm.anthropic": {
     config: z.object({ baseURL: z.string().url().optional() }).strict(),
     secret: z.object({ apiKey: z.string().min(10) }).strict(),
   },
+  /** @deprecated ADR 005 (ídem). */
   "llm.google": {
     config: z.object({ baseURL: z.string().url().optional() }).strict(),
     secret: z.object({ apiKey: z.string().min(10) }).strict(),
   },
-  /** Ollama, LM Studio, vLLM o proveedores con API compatible con OpenAI (p. ej. alojados en la UE). */
+  /**
+   * API compatible con OpenAI en la UE: "self_hosted" (Ollama/vLLM en el mismo servidor o su red privada)
+   * o "eu_hosted" (host público UE declarado en llmPolicy.hosts del workspace).
+   */
   "llm.openai_compatible": {
-    config: z.object({ baseURL: z.string().url() }).strict(),
+    config: z.object({ baseURL: z.string().url(), provider: z.enum(["self_hosted", "eu_hosted"]), region: z.string().min(2) }).strict(),
     secret: z.object({ apiKey: z.string().optional() }).strict(),
   },
   composio: {

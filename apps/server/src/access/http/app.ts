@@ -32,14 +32,16 @@ import { apiKeyRoutes } from "./routes/api-keys.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { wsRoutes } from "./routes/ws.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { taskRoutes } from "./routes/tasks.js";
+import { workspaceRoutes } from "./routes/workspace.js";
 import websocket from "@fastify/websocket";
 
 /** API Gateway (capa 02): REST /v1 + SSE, auth, rate limit, idempotencia y contrato OpenAPI 3.1. */
 export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: ctx.log.child({ component: "http" }) as FastifyBaseLogger,
-    // N7: el ticket de SSE viaja en la query. Esa petición no se loguea.
-    logController: new LogController({ disableRequestLogging: (req) => /\/v1\/runs\/[^/]+\/events$/.test(req.url.split("?")[0] ?? "") }),
+    // N7: el ticket de SSE viaja en la query. Esas peticiones no se loguean (y el serializer de req lo tacha igual).
+    logController: new LogController({ disableRequestLogging: (req) => /\/v1\/(runs|tasks)\/[^/]+\/events$/.test(req.url.split("?")[0] ?? "") }),
     // L7: confiar solo en los N saltos de proxy configurados (Caddy = 1); 0 = ignorar X-Forwarded-For.
     trustProxy: ctx.env.TRUST_PROXY === 0 ? false : (_addr: string, hop: number) => hop < ctx.env.TRUST_PROXY,
     bodyLimit: 1_048_576,
@@ -139,6 +141,8 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(sequenceRoutes, { deps: ctx });
   await app.register(metricsRoutes);
   await app.register(runRoutes, { deps: ctx });
+  await app.register(taskRoutes, { deps: ctx });
+  await app.register(workspaceRoutes, { deps: ctx });
   await app.register(meRoutes, { deps: ctx });
   await app.register(approvalRoutes, { deps: ctx });
   await app.register(apiKeyRoutes, { deps: ctx });

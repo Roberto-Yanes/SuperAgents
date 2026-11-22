@@ -1,4 +1,5 @@
 /** Genera packages/sdk/openapi.json desde los esquemas zod de las rutas (sin levantar el servidor). */
+import { MemoryJobPort } from "../src/execution/queue/ports.js";
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { loadEnv } from "../src/shared/config/env.js";
@@ -12,7 +13,7 @@ const config = loadEnv({
   BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "x".repeat(32),
   LOG_LEVEL: "silent",
 });
-const ctx = createContext(config, { queue: { send: async () => null } });
+const ctx = createContext(config, { queue: new MemoryJobPort() });
 const app = await buildApp(ctx);
 await app.ready();
 const out = fileURLToPath(new URL("../../../packages/sdk/openapi.json", import.meta.url));

@@ -54,8 +54,8 @@ describe("L4 · secretos ligados a su fila (AAD)", () => {
 
   it("un secreto copiado a otra conexión no descifra; rotate-secrets migra v1 y la clave antigua", async () => {
     const ws = await ctx.db.workspace.create({ data: { name: "l4", slug: "l4" } });
-    const a = await ctx.connections.create(ws.id, { kind: "llm.openai", name: "a", secret: { apiKey: "sk-aaaaaaaaaaaa" } }, systemActor);
-    const b = await ctx.connections.create(ws.id, { kind: "llm.openai", name: "b", secret: { apiKey: "sk-bbbbbbbbbbbb" } }, systemActor);
+    const a = await ctx.connections.create(ws.id, { kind: "llm.mistral", name: "a", secret: { apiKey: "sk-aaaaaaaaaaaa" } }, systemActor);
+    const b = await ctx.connections.create(ws.id, { kind: "llm.mistral", name: "b", secret: { apiKey: "sk-bbbbbbbbbbbb" } }, systemActor);
     const rowA = await ctx.db.connection.findUniqueOrThrow({ where: { id: a.id } });
     expect(isV2(rowA.secretEnc!)).toBe(true);
     await ctx.db.connection.update({ where: { id: b.id }, data: { secretEnc: rowA.secretEnc } }); // copia maliciosa
@@ -83,7 +83,12 @@ describe("L5 · baseURL de LLM", () => {
     await expect(
       ctx.connections.create(
         ws.id,
-        { kind: "llm.openai_compatible", name: "x", config: { baseURL: "http://169.254.169.254/v1" }, secret: { apiKey: "k-1234567890" } },
+        {
+          kind: "llm.openai_compatible",
+          name: "x",
+          config: { baseURL: "http://169.254.169.254/v1", provider: "self_hosted", region: "es" },
+          secret: { apiKey: "k-1234567890" },
+        },
         systemActor,
       ),
     ).rejects.toMatchObject({ code: "base_url_blocked" });
@@ -99,6 +104,7 @@ describe("L8 · memorias", () => {
       conversationId: null,
       contactId: null,
       idempotencyKey: "k",
+      task: null,
       db: ctx.db,
       bus: ctx.bus,
       log: ctx.log,

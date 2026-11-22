@@ -6,7 +6,7 @@ import { principalOf, requireScopes } from "../plugins/auth.js";
 import { parseSubject, subjectBelongsTo } from "../subjects.js";
 import { HttpError } from "../errors.js";
 
-export type MeDeps = Pick<AppContext, "db" | "tools" | "bus" | "runQueries" | "conversations" | "connections">;
+export type MeDeps = Pick<AppContext, "db" | "tools" | "bus" | "runQueries" | "conversations" | "connections" | "tasks">;
 
 /**
  * Rutas de contexto para la UI y las integraciones:
@@ -72,7 +72,7 @@ export const meRoutes: FastifyPluginAsyncZod<{ deps: MeDeps }> = async (app, { d
               z.object({
                 name: z.string(),
                 description: z.string(),
-                risk: z.enum(["read", "write", "send"]),
+                risk: z.enum(["read", "write", "send", "money", "delete"]),
                 approval: z.enum(["NEVER", "ASK_OWNER", "ALWAYS"]),
                 exposure: z.enum(["internal", "external"]),
                 scope: z.string(),
@@ -121,7 +121,7 @@ export const meRoutes: FastifyPluginAsyncZod<{ deps: MeDeps }> = async (app, { d
     async (req) => {
       const p = principalOf(req);
       const s = parseSubject(req.query.subject);
-      if (!s) throw new HttpError(400, "bad_subject", "subject debe ser run:<uuid>, conversation:<uuid> o connection:<uuid>");
+      if (!s) throw new HttpError(400, "bad_subject", "subject debe ser run:<uuid>, conversation:<uuid>, connection:<uuid> o task:<uuid>");
       if (s.kind === "connection" && !p.scopes.has("connections:read")) throw new HttpError(403, "forbidden", "Falta connections:read");
       if (!(await subjectBelongsTo(deps, p.workspaceId, s.kind, s.id))) throw new HttpError(404, "not_found", "Recurso no encontrado");
       const events = await deps.bus.backlog(p.workspaceId, s.normalized, BigInt(req.query.after), req.query.limit);

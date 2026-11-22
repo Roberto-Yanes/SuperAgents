@@ -13,6 +13,14 @@ export function llmTester(fetchImpl: FetchLike = fetch): ConnectionTester {
     let url: string;
     const headers: Record<string, string> = {};
     switch (conn.kind) {
+      case "llm.azure_openai":
+        url = `${(conn.config as { endpoint: string }).endpoint.replace(/\/$/, "")}/openai/v1/models`;
+        headers["api-key"] = secret.apiKey ?? "";
+        break;
+      case "llm.mistral":
+        url = "https://api.mistral.ai/v1/models";
+        headers.authorization = `Bearer ${secret.apiKey}`;
+        break;
       case "llm.openai":
         url = `${config.baseURL ?? "https://api.openai.com/v1"}/models`;
         headers.authorization = `Bearer ${secret.apiKey}`;

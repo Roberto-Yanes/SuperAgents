@@ -8,6 +8,8 @@ No hay fechas. El orden es de dependencia. E7 es un candado: no proceses datos r
 
 No lo reabras salvo que un criterio de aceptación de abajo lo pida.
 
+- **Runtime autónomo (22/11/2026):** E1, E2, E3, E4, E5, E7 y E10 cumplen sus criterios, con tests en `test/tasks.test.ts` y `test/runtime-policies.test.ts`. De E8 está la auditoría por tramo y los logs sin ticket; falta exportar y borrar un contacto con sus tareas. Decisiones en DECISIONS D-024.
+
 - Canal WhatsApp (Baileys y Cloud API), inbox, takeover, respuesta humana.
 - Cola D1: mensajes durante `WAITING_APPROVAL` y un solo run al resolver. N1 evita el doble reply.
 - Composio con una sola key de servidor. Acciones de la lista blanca. Sin triggers (E9).
@@ -33,7 +35,7 @@ No lo reabras salvo que un criterio de aceptación de abajo lo pida.
 
 E7 y E9 se pueden construir en paralelo con E1–E4. No las dejes para el final si hay un piloto.
 
-## E1. Puerto de jobs
+## E1. Puerto de jobs — hecho
 
 pg-boss sigue siendo el adaptador. El dominio deja de importarlo.
 
@@ -44,7 +46,7 @@ Está hecho cuando:
 - `domain/` no importa `pg-boss`;
 - el comportamiento actual de `run.process`, rutinas, secuencias y recordatorios no cambia.
 
-## E2. Task
+## E2. Task — hecho
 
 Una Task es el objetivo. Un Run es un tramo. WhatsApp sigue entrando por `receive`.
 
@@ -56,7 +58,7 @@ Está hecho cuando:
 - dos mensajes seguidos sin aprobación producen una sola llamada al modelo;
 - una Task de la app sin conversación no abre un hilo de WhatsApp por el solo hecho de existir.
 
-## E3. Cupos
+## E3. Cupos — hecho
 
 Está hecho cuando:
 
@@ -65,7 +67,7 @@ Está hecho cuando:
 - el dueño puede ampliar el cupo y la tarea sigue desde el checkpoint;
 - el costo del tramo sigue anotándose en `Run.costUsd`.
 
-## E4. Riesgo por tenant
+## E4. Riesgo por tenant — hecho
 
 Está hecho cuando:
 
@@ -75,7 +77,7 @@ Está hecho cuando:
 - `delete` no se puede pasar a directo;
 - el rechazo y la caducidad reanudan el tramo e informan al modelo, sin ejecutar el efecto.
 
-## E5. Tareas desde la app
+## E5. Tareas desde la app — hecho
 
 Tres usos, la misma Task. WhatsApp no es requisito.
 
@@ -97,7 +99,7 @@ Está hecho cuando:
 - borrar el contacto borra su memoria;
 - una Task corre igual si las tres capas están vacías.
 
-## E7. LLM en la UE
+## E7. LLM en la UE — hecho
 
 Candado de piloto. Se puede construir antes que E2.
 
@@ -109,7 +111,7 @@ Está hecho cuando:
 - al ejecutar, una conexión que ya no cumple la política deja la Task en `BLOCKED` con motivo `model_region` y cero llamadas;
 - un Azure OpenAI en región UE y un Mistral EU de prueba (host permitido, clave ficticia en el test) sí se guardan.
 
-## E8. Auditoría
+## E8. Auditoría — parcial (falta exportar y borrar un contacto; retención configurable)
 
 Está hecho cuando:
 
@@ -157,7 +159,7 @@ Está hecho cuando:
 - el token queda en el vault, cifrado y ligado a la conexión;
 - un workspace no puede usar el token de otro.
 
-## E10. Delegación
+## E10. Delegación — hecho
 
 Está hecho cuando:
 

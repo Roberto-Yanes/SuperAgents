@@ -1506,7 +1506,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    status?: "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+                    status?: "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "BLOCKED";
                     conversationId?: string;
                     agentId?: string;
                     cursor?: string;
@@ -1533,7 +1533,7 @@ export interface paths {
                                 conversationId: string | null;
                                 trigger: string;
                                 /** @enum {string} */
-                                status: "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+                                status: "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "BLOCKED";
                                 output: string | null;
                                 error: string | null;
                                 stepCount: number;
@@ -1629,7 +1629,7 @@ export interface paths {
                             conversationId: string | null;
                             trigger: string;
                             /** @enum {string} */
-                            status: "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+                            status: "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "BLOCKED";
                             output: string | null;
                             error: string | null;
                             stepCount: number;
@@ -1687,6 +1687,703 @@ export interface paths {
             };
         };
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    status?: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                    source?: "APP" | "CHANNEL" | "ROUTINE" | "DELEGATION";
+                    agentId?: string;
+                    parentTaskId?: string;
+                    cursor?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                /** Format: uuid */
+                                id: string;
+                                /** Format: uuid */
+                                agentId: string;
+                                goal: string;
+                                /** @enum {string} */
+                                source: "APP" | "CHANNEL" | "ROUTINE" | "DELEGATION";
+                                launchedBy: string;
+                                /** @enum {string} */
+                                status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                                conversationId: string | null;
+                                contactId: string | null;
+                                parentTaskId: string | null;
+                                depth: number;
+                                plan: unknown;
+                                planVersion: number;
+                                context: unknown;
+                                limits: {
+                                    maxSteps: number;
+                                    maxCostUsd: number;
+                                    maxDurationMs: number;
+                                    pauseClockOnWait: boolean;
+                                };
+                                spent: {
+                                    steps: number;
+                                    costUsd: number;
+                                    timeMs: number;
+                                };
+                                blockedReason: string | null;
+                                waiting: unknown | null;
+                                result: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                finishedAt: string | null;
+                                runs?: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    status: string;
+                                    trigger: string;
+                                    stepCount: number;
+                                    costUsd: number;
+                                    createdAt: string;
+                                    finishedAt: string | null;
+                                    error: string | null;
+                                }[];
+                                children?: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    /** @enum {string} */
+                                    status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                                    goal: string;
+                                }[];
+                            }[];
+                            nextCursor: string | null;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        agentId: string;
+                        goal: string;
+                        context?: {
+                            [key: string]: unknown;
+                        };
+                        limits?: {
+                            maxSteps?: number;
+                            maxCostUsd?: number;
+                            maxDurationMs?: number;
+                            pauseClockOnWait?: boolean;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            agentId: string;
+                            goal: string;
+                            /** @enum {string} */
+                            source: "APP" | "CHANNEL" | "ROUTINE" | "DELEGATION";
+                            launchedBy: string;
+                            /** @enum {string} */
+                            status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                            conversationId: string | null;
+                            contactId: string | null;
+                            parentTaskId: string | null;
+                            depth: number;
+                            plan: unknown;
+                            planVersion: number;
+                            context: unknown;
+                            limits: {
+                                maxSteps: number;
+                                maxCostUsd: number;
+                                maxDurationMs: number;
+                                pauseClockOnWait: boolean;
+                            };
+                            spent: {
+                                steps: number;
+                                costUsd: number;
+                                timeMs: number;
+                            };
+                            blockedReason: string | null;
+                            waiting: unknown | null;
+                            result: string | null;
+                            error: string | null;
+                            createdAt: string;
+                            finishedAt: string | null;
+                            runs?: {
+                                /** Format: uuid */
+                                id: string;
+                                status: string;
+                                trigger: string;
+                                stepCount: number;
+                                costUsd: number;
+                                createdAt: string;
+                                finishedAt: string | null;
+                                error: string | null;
+                            }[];
+                            children?: {
+                                /** Format: uuid */
+                                id: string;
+                                /** @enum {string} */
+                                status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                                goal: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            agentId: string;
+                            goal: string;
+                            /** @enum {string} */
+                            source: "APP" | "CHANNEL" | "ROUTINE" | "DELEGATION";
+                            launchedBy: string;
+                            /** @enum {string} */
+                            status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                            conversationId: string | null;
+                            contactId: string | null;
+                            parentTaskId: string | null;
+                            depth: number;
+                            plan: unknown;
+                            planVersion: number;
+                            context: unknown;
+                            limits: {
+                                maxSteps: number;
+                                maxCostUsd: number;
+                                maxDurationMs: number;
+                                pauseClockOnWait: boolean;
+                            };
+                            spent: {
+                                steps: number;
+                                costUsd: number;
+                                timeMs: number;
+                            };
+                            blockedReason: string | null;
+                            waiting: unknown | null;
+                            result: string | null;
+                            error: string | null;
+                            createdAt: string;
+                            finishedAt: string | null;
+                            runs?: {
+                                /** Format: uuid */
+                                id: string;
+                                status: string;
+                                trigger: string;
+                                stepCount: number;
+                                costUsd: number;
+                                createdAt: string;
+                                finishedAt: string | null;
+                                error: string | null;
+                            }[];
+                            children?: {
+                                /** Format: uuid */
+                                id: string;
+                                /** @enum {string} */
+                                status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                                goal: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        maxSteps?: number;
+                        maxCostUsd?: number;
+                        maxDurationMs?: number;
+                        pauseClockOnWait?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            agentId: string;
+                            goal: string;
+                            /** @enum {string} */
+                            source: "APP" | "CHANNEL" | "ROUTINE" | "DELEGATION";
+                            launchedBy: string;
+                            /** @enum {string} */
+                            status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                            conversationId: string | null;
+                            contactId: string | null;
+                            parentTaskId: string | null;
+                            depth: number;
+                            plan: unknown;
+                            planVersion: number;
+                            context: unknown;
+                            limits: {
+                                maxSteps: number;
+                                maxCostUsd: number;
+                                maxDurationMs: number;
+                                pauseClockOnWait: boolean;
+                            };
+                            spent: {
+                                steps: number;
+                                costUsd: number;
+                                timeMs: number;
+                            };
+                            blockedReason: string | null;
+                            waiting: unknown | null;
+                            result: string | null;
+                            error: string | null;
+                            createdAt: string;
+                            finishedAt: string | null;
+                            runs?: {
+                                /** Format: uuid */
+                                id: string;
+                                status: string;
+                                trigger: string;
+                                stepCount: number;
+                                costUsd: number;
+                                createdAt: string;
+                                finishedAt: string | null;
+                                error: string | null;
+                            }[];
+                            children?: {
+                                /** Format: uuid */
+                                id: string;
+                                /** @enum {string} */
+                                status: "PLANNING" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_EXTERNAL" | "WAITING_CHILD" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "CANCELLED";
+                                goal: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}/signal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            accepted: true;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tasks/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    after?: string;
+                    ticket?: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspace/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            riskPolicy: unknown;
+                            llmPolicy: unknown;
+                            taskLimits: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspace/risk-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        read?: "direct" | "approval";
+                        write?: {
+                            /** @enum {string} */
+                            internal?: "direct" | "approval";
+                            /** @enum {string} */
+                            external?: "approval";
+                        };
+                        /** @enum {string} */
+                        send?: "direct" | "approval";
+                        /** @enum {string} */
+                        money?: "direct" | "approval";
+                        /** @enum {string} */
+                        delete?: "approval";
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            read?: "direct" | "approval";
+                            write?: {
+                                /** @enum {string} */
+                                internal?: "direct" | "approval";
+                                /** @enum {string} */
+                                external?: "approval";
+                            };
+                            /** @enum {string} */
+                            send?: "direct" | "approval";
+                            /** @enum {string} */
+                            money?: "direct" | "approval";
+                            /** @enum {string} */
+                            delete?: "approval";
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspace/llm-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        allowed?: ("azure_openai" | "mistral" | "eu_hosted" | "self_hosted")[];
+                        hosts?: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            allowed?: ("azure_openai" | "mistral" | "eu_hosted" | "self_hosted")[];
+                            hosts?: string[];
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspace/task-limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        maxSteps?: number;
+                        maxCostUsd?: number;
+                        maxDurationMs?: number;
+                        pauseClockOnWait?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            maxSteps?: number;
+                            maxCostUsd?: number;
+                            maxDurationMs?: number;
+                            pauseClockOnWait?: boolean;
+                        };
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -1780,7 +2477,7 @@ export interface paths {
                                 name: string;
                                 description: string;
                                 /** @enum {string} */
-                                risk: "read" | "write" | "send";
+                                risk: "read" | "write" | "send" | "money" | "delete";
                                 /** @enum {string} */
                                 approval: "NEVER" | "ASK_OWNER" | "ALWAYS";
                                 /** @enum {string} */
@@ -2195,7 +2892,7 @@ export interface paths {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        kind: "llm.openai" | "llm.anthropic" | "llm.google" | "llm.openai_compatible" | "composio" | "channel.whatsapp_cloud" | "channel.whatsapp_baileys";
+                        kind: "llm.azure_openai" | "llm.mistral" | "llm.openai" | "llm.anthropic" | "llm.google" | "llm.openai_compatible" | "composio" | "channel.whatsapp_cloud" | "channel.whatsapp_baileys";
                         name: string;
                         /** @default {} */
                         config?: {

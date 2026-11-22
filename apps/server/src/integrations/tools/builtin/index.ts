@@ -1,3 +1,4 @@
+import { taskTools } from "./tasks.js";
 import { z } from "zod";
 import { defineTool, type ToolDef } from "../types.js";
 
@@ -96,4 +97,4 @@ export const contactUpdate = defineTool({
   },
 });
 
-export const builtinTools: ToolDef[] = [memorySave, memoryRecall, handoffRequest, contactUpdate] as ToolDef[];
+export const builtinTools: ToolDef[] = [memorySave, memoryRecall, handoffRequest, contactUpdate, ...taskTools] as ToolDef[];

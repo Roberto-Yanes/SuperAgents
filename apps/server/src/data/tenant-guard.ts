@@ -12,6 +12,7 @@ export const TENANT_MODELS = new Set([
   "Conversation",
   "Message",
   "Run",
+  "Task",
   "RunStep",
   "Approval",
   "Memory",

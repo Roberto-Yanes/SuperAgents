@@ -159,6 +159,8 @@ export class ComposioToolProvider implements ToolProvider {
 /** Riesgo por convención de nombres de Composio (VERBO en el slug). Configurable por acción. */
 export function inferRisk(slug: string): ToolRisk {
   const s = slug.toUpperCase();
+  if (/_(DELETE|REMOVE|DESTROY|PURGE)(_|$)/.test(s)) return "delete";
+  if (/_(PAY|PAYMENT|CHARGE|REFUND|TRANSFER|PAYOUT)(_|$)/.test(s)) return "money";
   if (/_(SEND|REPLY|FORWARD|POST|PUBLISH|INVITE|SHARE)(_|$)/.test(s)) return "send";
   if (/_(CREATE|UPDATE|DELETE|REMOVE|ADD|MOVE|SET|PATCH|UPLOAD|ARCHIVE|CANCEL)(_|$)/.test(s)) return "write";
   if (/_(GET|LIST|SEARCH|FETCH|READ|FIND|RETRIEVE|QUERY|COUNT)(_|$)/.test(s)) return "read";
@@ -166,7 +168,7 @@ export function inferRisk(slug: string): ToolRisk {
 }
 
 export function defaultApproval(slug: string, risk: ToolRisk): ApprovalMode {
-  if (/_(DELETE|REMOVE)(_|$)/.test(slug.toUpperCase())) return "ALWAYS";
+  if (risk === "delete" || /_(DELETE|REMOVE)(_|$)/.test(slug.toUpperCase())) return "ALWAYS";
   return risk === "read" ? "NEVER" : "ASK_OWNER";
 }
 

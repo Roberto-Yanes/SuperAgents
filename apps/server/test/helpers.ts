@@ -4,7 +4,7 @@ import { loadEnv } from "../src/shared/config/env.js";
 import { createContext, type AppContext, type ContextOverrides } from "../src/container.js";
 import { StaticLlmResolver } from "../src/orchestration/llm/registry.js";
 import { SCOPES, type Scope } from "../src/access/auth/scopes.js";
-import type { JobName, JobPayload, JobQueue } from "../src/execution/queue/jobs.js";
+import { MemoryJobPort } from "../src/execution/queue/ports.js";
 
 const usage = { inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 5, text: 5, reasoning: 0 } };
 
@@ -35,18 +35,8 @@ export function scriptedModel(turns: ScriptedTurn[]) {
 }
 
 /** Cola falsa que registra los jobs enviados (para tests sin workers). */
-export class RecordingQueue implements JobQueue {
-  readonly jobs: Array<{ name: JobName; data: unknown }> = [];
-  async send<N extends JobName>(name: N, data: JobPayload<N>): Promise<string> {
-    this.jobs.push({ name, data });
-    return String(this.jobs.length);
-  }
-  take(name: JobName) {
-    const found = this.jobs.filter((j) => j.name === name);
-    this.jobs.splice(0, this.jobs.length, ...this.jobs.filter((j) => j.name !== name));
-    return found;
-  }
-}
+/** Cola de tests: el adaptador en memoria del puerto de jobs (ADR 004). */
+export class RecordingQueue extends MemoryJobPort {}
 
 export function testContext(overrides: ContextOverrides = {}): AppContext {
   return createContext(loadEnv(process.env), { queue: new RecordingQueue(), llm: new StaticLlmResolver(scriptedModel([{ text: "ok" }]).model), ...overrides });
@@ -80,4 +70,11 @@ export async function waitFor<T>(fn: () => Promise<T | null | undefined | false>
     if (Date.now() - start > timeoutMs) throw new Error("waitFor: tiempo agotado");
     await new Promise((r) => setTimeout(r, intervalMs));
   }
+}
+
+/** E4: un OWNER baja send/money a directo en la política de riesgo del workspace (para tests de tools de envío). */
+export async function allowDirectSend(ctx: AppContext, workspaceId: string): Promise<void> {
+  const ws = await ctx.db.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+  const settings = (ws.settings ?? {}) as Record<string, unknown>;
+  await ctx.db.workspace.update({ where: { id: workspaceId }, data: { settings: { ...settings, riskPolicy: { send: "direct", money: "direct" } } } });
 }

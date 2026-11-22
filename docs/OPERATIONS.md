@@ -4,7 +4,14 @@
 
 Los clientes son europeos. El Postgres, los backups y el proceso van en un proveedor de la UE. La referencia es Hetzner. No subas un volumen con mensajes de clientes a una región de afuera.
 
-Los modelos son BYOK y tienen que declarar región UE ([ADR 005](adr/005-llm-residencia-ue.md)). Hasta que el producto rechace solo los hosts de afuera, no cargues claves de xAI, de `api.openai.com` ni de otro endpoint sin región UE. `LLM_BASEURL_ALLOWLIST` limita hosts; no reemplaza esa regla.
+Los modelos son BYOK y tienen que declarar región UE ([ADR 005](adr/005-llm-residencia-ue.md)). El producto ya lo exige: guardar una conexión LLM pide proveedor, región y host, y rechaza xAI, `api.openai.com`, las APIs públicas de Anthropic y Google y cualquier host sin región demostrable. La misma comprobación corre al usar la conexión: si dejó de cumplir, la tarea queda `BLOCKED` con motivo `model_region` sin llamar al modelo. `LLM_BASEURL_ALLOWLIST` limita hosts además de esa regla.
+
+| Proveedor                   | Tipo de conexión        | Config                                                                                                                                                                                                |
+| --------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Azure OpenAI                | `llm.azure_openai`      | `region` (p. ej. `swedencentral`) y `endpoint` regional (`https://swedencentral.api.cognitive.microsoft.com`) o un recurso con la región en el nombre (`https://acme-swedencentral.openai.azure.com`) |
+| Mistral                     | `llm.mistral`           | nada (región `eu`, host `api.mistral.ai`)                                                                                                                                                             |
+| Modelo en el mismo servidor | `llm.openai_compatible` | `provider: "self_hosted"`, `region` del servidor (`fsn1`, `es`…), `baseURL` interno (`http://ollama:11434/v1`)                                                                                        |
+| Modelo hospedado en la UE   | `llm.openai_compatible` | `provider: "eu_hosted"`, `region`, `baseURL` cuyo host esté en `llmPolicy.hosts` (`PUT /v1/workspace/llm-policy`)                                                                                     |
 
 Composio Cloud procesa en Estados Unidos. Si el cliente exige residencia UE para esas acciones, no uses esa app o usá Composio self-hosted. Temporal, si algún día aplica, también va en Hetzner EU ([ADR 004](adr/004-motor-jobs-pgboss-temporal.md)).
 
@@ -29,7 +36,13 @@ Composio Cloud procesa en Estados Unidos. Si el cliente exige residencia UE para
 | `TENANT_GUARD`          | error (dev/test), warn (prod) | Guarda que detecta consultas masivas sin `workspaceId` en los servicios por workspace.                                                            |
 | `COMPOSIO_API_KEY`      | (vacío = deshabilitado)       | Una sola key de proyecto de Composio por servidor. No va en la conexión ni en la UI. Si falta, `/ready` dice `composio: disabled` y no hay tools. |
 
-Modelos locales (opcional): `docker compose -f docker/compose.yaml --profile local-llm up -d` y crear una conexión `llm.openai_compatible` con `baseURL` `http://ollama:11434/v1`.
+Modelos locales (opcional): `docker compose -f docker/compose.yaml --profile local-llm up -d` y crear una conexión `llm.openai_compatible` con `{"provider":"self_hosted","region":"fsn1","baseURL":"http://ollama:11434/v1"}`.
+
+### Políticas del workspace (OWNER/ADMIN, scope `workspace:admin`)
+
+- `PUT /v1/workspace/risk-policy`: riesgo de la tool → `direct` o `approval`. Defaults: `read` directo, `write` directo en cara interna, `send` y `money` con aprobación, `delete` siempre con aprobación. Bajar `send` o `money` a directo exige un usuario OWNER y queda auditado.
+- `PUT /v1/workspace/llm-policy`: `allowed` (subconjunto de `azure_openai`, `mistral`, `eu_hosted`, `self_hosted`) y `hosts` UE propios.
+- `PUT /v1/workspace/task-limits`: cupo por defecto de las tareas (pasos, costo de referencia, tiempo). Nunca supera el techo de la plataforma (200 pasos, 25 USD, 7 días).
 
 ## Copias de seguridad
 
@@ -45,6 +58,9 @@ Modelos locales (opcional): `docker compose -f docker/compose.yaml --profile loc
 4. Quitar `SECRET_KEY_OLD` y reiniciar. Las sesiones de Baileys se recifran solas la próxima vez que se guardan; para forzarlo, desvincular y volver a vincular.
 
 ## Estados que necesitan una persona
+
+- **Tarea `BLOCKED`** (evento `task.blocked`): se acabó el cupo (`steps`, `cost`, `time`) o la conexión del modelo ya no cumple la política UE (`model_region`). Para cupo: `POST /v1/tasks/<id>/limits`; la tarea sigue desde su checkpoint. Para `model_region`: arreglar la conexión o la política.
+- **Tarea `WAITING_EXTERNAL`** sin fecha: espera un dato del dueño (`waiting.reason`). Se responde con `POST /v1/tasks/<id>/signal`.
 
 - **Mensaje `UNKNOWN`** (evento `message.unknown`): el envío se cortó a mitad (timeout o caída) y pudo llegar o no. No se reenvía solo: revisar en el canal y reenviar a mano si hace falta.
 - **Aprobación `UNKNOWN`** (evento `approval.unknown`): el proceso cayó mientras ejecutaba una acción aprobada. Comprobar en la app de destino si se hizo.

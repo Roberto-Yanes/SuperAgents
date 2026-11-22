@@ -33,6 +33,28 @@ export interface PromptInput {
   timezone: string;
   now: Date;
   memories: Array<{ key: string; content: string }>;
+  /** Solo en tareas de cara interna (app, rutina, delegación): reglas del loop y cupo que queda. */
+  task?: {
+    depth: number;
+    plan: Array<{ id: string; title: string; status: string }>;
+    remaining: { steps: number; costUsd: number; minutes: number };
+  };
+}
+
+/** Reglas del loop autónomo (ADR 003): el agente decide el orden, dentro de los permisos y del cupo. */
+function taskRules(t: NonNullable<PromptInput["task"]>): string {
+  const plan = t.plan.length ? t.plan.map((s) => `- [${s.status}] ${s.id}: ${s.title}`).join("\n") : "(todavía sin plan)";
+  return `# Cómo trabajas en una tarea
+El primer mensaje trae el objetivo del dueño. Decide tú el orden de los pasos.
+1. Si el objetivo tiene más de un paso, escribe primero el plan con plan.update y mantenlo al día (doing, done, skipped).
+2. Investiga con las herramientas de lectura antes de actuar. Si el plan no alcanza, revísalo.
+3. Las acciones con efecto (enviar, publicar, cobrar, borrar) pueden quedar a la espera de aprobación: no las repitas.
+4. Si te falta un dato del dueño o hay que esperar a una fecha, usa task.wait. Si una parte no la puedes cerrar tú, task.delegate.
+5. Cuando el objetivo esté cumplido, responde con el resultado final (o el borrador pedido) en un texto claro, sin llamar a más herramientas.
+Cupo que queda: ${t.remaining.steps} pasos, ${t.remaining.costUsd.toFixed(2)} USD, ${t.remaining.minutes} min. Si se acaba, la tarea se detiene: prioriza.${t.depth > 0 ? `\nEres una tarea delegada (nivel ${t.depth}): céntrate en tu objetivo y devuelve un resultado que la tarea madre pueda usar.` : ""}
+
+# Plan vigente
+${plan}`;
 }
 
 export function buildSystemPrompt(input: PromptInput): string {
@@ -48,6 +70,7 @@ export function buildSystemPrompt(input: PromptInput): string {
     `\n# Tu rol: ${input.agentName}\n${input.instructions}`,
     `\n# Contexto\nFecha y hora local (${input.timezone}): ${localNow}`,
     `\n# Lo que sabes del contacto\n${memories}`,
+    ...(input.task ? [`\n${taskRules(input.task)}`] : []),
   ].join("\n");
 }
 

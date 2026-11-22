@@ -100,7 +100,7 @@ def arrow(x1, y1, x2, y2, color=(71, 85, 105), width=4, head=14, dashed=False):
 
 # ---------------- Encabezado ----------------
 d.rectangle((40, 40, 50, 130), fill=(124, 58, 237))
-d.text((72, 38), "Everglow Agentes — Arquitectura y estado de implementación (106 tests) — nov 2026", font=fb(42), fill=INK)
+d.text((72, 38), "Everglow Agentes — Arquitectura y estado de implementación (135 tests) — nov 2026", font=fb(42), fill=INK)
 d.text((72, 98), "Agentes autónomos que reciben un objetivo, planifican y ejecutan · clientes en España (RGPD) · LLM con residencia UE · producto de Everglow, separado de Studio (Galatea)", font=fm(22), fill=MUTED)
 lx = 72; ly = 160
 for k in ["done", "partial", "todo"]:
@@ -112,7 +112,7 @@ for k in ["done", "partial", "todo"]:
 d.rounded_rectangle((lx, ly, lx + 46, ly + 34), radius=8, fill=ST["future"]["fill"])
 dashed_rrect(lx, ly, lx + 46, ly + 34, ST["future"]["bd"], width=3, dash=7, gap=5, r=8)
 d.text((lx + 66, ly + 17), "Futuro / condicional (borde punteado)", font=fb(24), fill=INK, anchor="lm")
-d.text((2360, ly + 17), "Estado al 21/11/2026", font=fm(20), fill=MUTED, anchor="rm")
+d.text((2360, ly + 17), "Estado al 22/11/2026", font=fm(20), fill=MUTED, anchor="rm")
 
 X0 = 270  # inicio de contenido dentro de las bandas
 # ---------------- 01 Entradas ----------------
@@ -138,12 +138,12 @@ LX, LY, LW = X0, y + 18, 1100
 d.rounded_rectangle((LX, LY, LX + LW, LY + 470), radius=16, fill=(250, 245, 255), outline=(196, 181, 253), width=3)
 d.text((LX + 20, LY + 16), "Loop de decisión de una Task (el agente decide el orden, no un flujo fijo)", font=fb(24), fill=(76, 29, 149))
 nodes = [  # (x, y, título, sub, estado)
-    (LX + 30,  LY + 70,  "1 · Objetivo y plan", "PLANNING · arma o revisa el plan versionado", "todo"),
+    (LX + 30,  LY + 70,  "1 · Objetivo y plan", "PLANNING · plan.update versionado; el agente lo revisa", "done"),
     (LX + 390, LY + 70,  "2 · Ejecutar tool", "RUNNING · tool calling con LLM UE", "done"),
-    (LX + 750, LY + 70,  "3 · Evaluar riesgo", "Política por tenant sobre NEVER / ASK_OWNER / ALWAYS", "partial"),
+    (LX + 750, LY + 70,  "3 · Evaluar riesgo", "Política por tenant sobre NEVER / ASK_OWNER / ALWAYS", "done"),
     (LX + 750, LY + 280, "4 · Aprobación", "WAITING_APPROVAL · pausa y cola de mensajes (D1)", "done"),
     (LX + 390, LY + 280, "5 · Checkpoint", "RunStep por paso · outbox sin duplicar efectos", "done"),
-    (LX + 30,  LY + 280, "6 · ¿Cupo y resultado?", "Pasos / costo / tiempo · seguir, replanificar o cerrar", "todo"),
+    (LX + 30,  LY + 280, "6 · ¿Cupo y resultado?", "Pasos / costo / tiempo · BLOCKED visible · ampliar y seguir", "done"),
 ]
 NW, NH = 320, 150
 for nx, ny, t, sb, st in nodes:
@@ -175,22 +175,22 @@ for s_ in states:
     sx += tw + 8
 # Componentes del runtime (debajo del loop)
 cy = LY + 570; cw = (LW - 2 * gap) // 3; ch = 140
-box(LX, cy, cw, ch, "Task autónoma", "Objetivo, origen, plan versionado, límites y gasto", "todo")
-box(LX + cw + gap, cy, cw, ch, "Loop con cupo", "Corte visible por pasos, costo y tiempo", "todo")
-box(LX + 2 * (cw + gap), cy, cw, ch, "Delegación", "Task hija solo si la tarea lo pide (WAITING_CHILD)", "todo", "Post-MVP")
+box(LX, cy, cw, ch, "Task autónoma", "Objetivo, origen, plan versionado, límites y gasto · /v1/tasks", "done")
+box(LX + cw + gap, cy, cw, ch, "Loop con cupo", "Corte visible por pasos, costo y tiempo", "done")
+box(LX + 2 * (cw + gap), cy, cw, ch, "Delegación", "Task hija solo si la tarea lo pide (WAITING_CHILD) · profundidad 3", "done")
 # Columna derecha del runtime
 RX = LX + LW + 20; RW = 1818 - RX
 box(RX, LY, RW, 140, "Agent runtime base", "Tool calling con checkpoint por paso · caras interna y externa · cancelación · barrido de huérfanos", "done")
 box(RX, LY + 150, RW, 120, "Aprobaciones", "WAITING_APPROVAL · caducan solas · cola de mensajes (D1)", "done", "Con cola D1")
-box(RX, LY + 280, RW, 112, "Riesgo por tenant", "Uso directo o aprobación por tool y cliente", "partial", "Base: aprobaciones")
+box(RX, LY + 280, RW, 112, "Riesgo por tenant", "read · write · send · money · delete → directo o aprobación; solo endurece", "done")
 box(RX, LY + 402, RW, 130, "Memoria en 3 capas", "RAG del negocio · memoria del contacto · notas del agente", "partial", "Hechos · falta RAG")
 # LLM BYOK UE
 ly2 = LY + 542
 d.rounded_rectangle((RX, ly2, RX + RW, LY + 730), radius=14, fill=(250, 250, 255), outline=(129, 140, 248), width=3)
 d.text((RX + 16, ly2 + 12), "LLM BYOK · residencia UE (ADR-005)", font=fb(19), fill=(55, 48, 163))
 hw = (RW - 36) // 2
-box(RX + 12, ly2 + 44, hw, 128, "Capa LLM", "Multi-proveedor · BYOK", "done", tsize=18, ssize=15)
-box(RX + 24 + hw, ly2 + 44, hw, 128, "Validación región UE", "Rechaza endpoints sin región", "todo", tsize=18, ssize=15)
+box(RX + 12, ly2 + 44, hw, 128, "Capa LLM", "Azure UE · Mistral · self/eu-hosted · BYOK", "done", tsize=18, ssize=15)
+box(RX + 24 + hw, ly2 + 44, hw, 128, "Validación región UE", "Al guardar y al usar · BLOCKED model_region", "done", tsize=18, ssize=15)
 
 # ---------------- 04 Dominio ----------------
 y = 1380; band(y, 250, "04", "Dominio / negocio", (5, 150, 105), "Módulos que el agente usa como tools")
@@ -225,13 +225,13 @@ def chip(x, y, w, h, t, st):
     d.text((x + 12, y + h / 2), t, font=fb(f_), fill=INK, anchor="lm")
     badge(x + w - 16, y + h / 2, st, r=12)
 y = 1900; band(y, 290, "06", "Ejecución asíncrona", (219, 39, 119), "Motor de jobs · ADR-004")
-box(X0, y + 18, 230, 254, "Puerto de jobs", "Interfaz jobs/ workflows: el código no depende del motor", "todo")
+box(X0, y + 18, 230, 254, "Puerto de jobs", "JobPort + WaitPort (ADR 004): enqueue, schedule, wakeAt, wakeOnSignal", "done")
 qx = X0 + 260; qw = 900
 d.rounded_rectangle((qx, y + 18, qx + qw, y + 272), radius=14, fill=ST["done"]["fill"], outline=ST["done"]["bd"], width=4)
 badge(qx + qw - 22, y + 40, "done")
 d.text((qx + 16, y + 32), "pg-boss 12 · cola, scheduler y workers (hoy)", font=fb(22), fill=INK)
-d.text((qx + 16, y + 66), "Retoma Tasks en espera · run.execute / run.resume · tareas de días sobre Postgres", font=fm(17), fill=MUTED)
-jobs = [("channel.inbound", "done"), ("run.execute", "done"), ("run.resume", "done"), ("sequence.step", "done"),
+d.text((qx + 16, y + 66), "Retoma Tasks en espera · run.process / task.wake · tareas de días sobre Postgres", font=fm(17), fill=MUTED)
+jobs = [("channel.inbound", "done"), ("run.process", "done"), ("task.wake", "done"), ("sequence.step", "done"),
         ("routine.cron", "done"), ("crm.sync", "todo"), ("integration.event", "todo"), ("appointment.reminder", "done")]
 jw = (qw - 5 * 10) // 4
 for i, (t, st) in enumerate(jobs):
@@ -249,7 +249,7 @@ dws = [420, 250, 280, 330]
 xs = X0; items = [("PostgreSQL 16 + pgvector", "Prisma 7 · workspaceId en toda entidad", "done", "pgvector activo · sin tablas RAG"),
                   ("Tenant-guard", "Aislamiento por workspace", "done", None),
                   ("Archivos", "Disco · sesión Baileys cifrada", "partial", "Sin S3 ni cifrado"),
-                  ("Auditoría RGPD", "Decisión, dato, tool, modelo, región", "partial", "Hay AuditLog")]
+                  ("Auditoría RGPD", "Decisión, dato, tool, modelo, región por tramo", "partial", "Falta export/borrado")]
 for (t, sb, st, nt), w_ in zip(items, dws):
     box(xs, y + 18, w_, 134, t, sb, st, nt); xs += w_ + gap
 box(xs, y + 18, 1818 - xs, 134, "Backups", "pg_dump diario + volúmenes", "todo", "Documentado")
@@ -287,7 +287,7 @@ pills(SX + 255, 1150, "SEGURIDAD", [("Vault", "partial", "Secretos propios"), ("
 
 # ---------------- Pie ----------------
 fy = 2535
-d.text((40, fy), "Pendiente prioritario (ROADMAP): Task autónoma y loop con cupo · validación de región UE · puerto de jobs · triggers Composio (integration.event) · crm.sync · RAG y base de conocimiento · plantillas por rubro · backups.", font=fm(19), fill=MUTED)
-d.text((40, fy + 30), "«Sin probar real»: probado con simulaciones. Fuente: docs/ARCHITECTURE.md, ADR-003/004/005, ROADMAP.md · everglow-agentes · v4 · 21/11/2026", font=fm(19), fill=MUTED)
+d.text((40, fy), "Pendiente prioritario (ROADMAP): RAG y base de conocimiento (E6) · exportar y borrar un contacto (E8) · triggers Composio (integration.event) · crm.sync · plantillas por rubro · backups.", font=fm(19), fill=MUTED)
+d.text((40, fy + 30), "«Sin probar real»: probado con simulaciones. Fuente: docs/ARCHITECTURE.md, ADR-003/004/005, ROADMAP.md · everglow-agentes · v4.1 · 22/11/2026", font=fm(19), fill=MUTED)
 img.save(OUT, optimize=True)
 print(OUT, img.size)

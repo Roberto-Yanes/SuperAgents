@@ -5,6 +5,9 @@ import { runsFinished } from "../../shared/observability/metrics.js";
 import type { RunStatus } from "../../data/generated/prisma/enums.js";
 import type { EventBus } from "../../execution/events/bus.js";
 
+/** Antigüedad mínima del latido para recuperar un run RUNNING (ver reclaim). */
+export const RECLAIM_MIN_AGE_MS = 2_000;
+
 /** Otro run de la misma conversación está en curso: el job se reintenta más tarde. */
 export class RunBusyError extends Error {
   readonly retryable = true;
@@ -18,7 +21,7 @@ export class RunBusyError extends Error {
 }
 
 export type RunWithAgent = Prisma.RunGetPayload<{ include: { agent: true; conversation: true } }>;
-export type FinalStatus = "SUCCEEDED" | "FAILED" | "CANCELLED";
+export type FinalStatus = "SUCCEEDED" | "FAILED" | "CANCELLED" | "BLOCKED";
 
 /** Persistencia y ciclo de vida de un run: carga, toma atómica, checkpoint y cierre. */
 export class RunStore {
@@ -65,6 +68,9 @@ export class RunStore {
    * Si dos procesos intentan recuperarlo a la vez (reintento de pg-boss + barrido), solo uno gana.
    */
   async reclaim(run: { id: string; workspaceId: string; heartbeatAt: Date | null }): Promise<boolean> {
+    // El latido leído tiene que ser viejo: si es de hace instantes, otro proceso acaba de reclamarlo (y quien lo leyó
+    // después de ese reclamo vería un valor "igual" y ganaría también). El barrido deja su marca RECLAIM_MIN_AGE_MS atrás.
+    if (run.heartbeatAt && Date.now() - run.heartbeatAt.getTime() < RECLAIM_MIN_AGE_MS) return false;
     const res = await this.db.run.updateMany({
       where: { id: run.id, workspaceId: run.workspaceId, status: "RUNNING", heartbeatAt: run.heartbeatAt },
       data: { heartbeatAt: new Date() },
@@ -92,7 +98,7 @@ export class RunStore {
   ): Promise<boolean> {
     // Condicionado: un run ya cerrado (p. ej. cancelado por una persona) no se reescribe.
     const res = await this.db.run.updateMany({
-      where: { id: run.id, workspaceId: run.workspaceId, status: { notIn: ["SUCCEEDED", "FAILED", "CANCELLED"] } },
+      where: { id: run.id, workspaceId: run.workspaceId, status: { notIn: ["SUCCEEDED", "FAILED", "CANCELLED", "BLOCKED"] } },
       data: {
         status,
         finishedAt: new Date(),

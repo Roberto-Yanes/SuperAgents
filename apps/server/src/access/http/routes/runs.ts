@@ -3,12 +3,12 @@ import { z } from "zod";
 import type { AppContext } from "../../../container.js";
 import { principalOf, requireScopes } from "../plugins/auth.js";
 import { IdParams, RunOut, iso } from "../schemas.js";
-import { actorFrom, type Scope } from "../../auth/scopes.js";
-import { HttpError } from "../errors.js";
+import { actorFrom } from "../../auth/scopes.js";
+import { streamSubject, ticketPrincipal } from "../sse.js";
 
 export type RunDeps = Pick<AppContext, "runQueries" | "bus" | "runControl" | "wsTickets">;
 
-const RunStatus = z.enum(["QUEUED", "RUNNING", "WAITING_APPROVAL", "SUCCEEDED", "FAILED", "CANCELLED"]);
+const RunStatus = z.enum(["QUEUED", "RUNNING", "WAITING_APPROVAL", "SUCCEEDED", "FAILED", "CANCELLED", "BLOCKED"]);
 
 export const runRoutes: FastifyPluginAsyncZod<{ deps: RunDeps }> = async (app, { deps }) => {
   app.get(
@@ -84,23 +84,7 @@ export const runRoutes: FastifyPluginAsyncZod<{ deps: RunDeps }> = async (app, {
   app.get(
     "/v1/runs/:id/events",
     {
-      // M6: EventSource no puede enviar cabeceras → ?ticket= (POST /v1/ws/tickets, un solo uso, 60 s).
-      // N7: buildApp no loguea esta ruta, así el ticket de la query no queda en los logs.
-      preHandler: [
-        async (req) => {
-          const ticket = (req.query as { ticket?: string }).ticket;
-          if (!ticket || req.principal) return;
-          const row = await deps.wsTickets.consume(ticket);
-          if (!row) throw new HttpError(401, "invalid_ticket", "Ticket inválido, usado o caducado");
-          req.principal = {
-            kind: row.actorType === "user" ? "user" : "api_key",
-            actorId: row.actorId,
-            workspaceId: row.workspaceId,
-            scopes: new Set(row.scopes as Scope[]),
-          };
-        },
-        requireScopes("events:read"),
-      ],
+      preHandler: [ticketPrincipal(deps), requireScopes("events:read")],
       schema: {
         tags: ["runs"],
         params: IdParams,
@@ -111,44 +95,7 @@ export const runRoutes: FastifyPluginAsyncZod<{ deps: RunDeps }> = async (app, {
     async (req, reply) => {
       const p = principalOf(req);
       const run = await deps.runQueries.get(p.workspaceId, req.params.id); // 404 si no es de este workspace
-      const subject = `run:${run.id}`;
-      const lastId = (req.headers["last-event-id"] as string | undefined) ?? req.query.after ?? "0";
-      const cursor = BigInt(/^\d+$/.test(lastId) ? lastId : "0");
-
-      // hijack salta los hooks de respuesta: se copian las cabeceras ya fijadas (CORS, request-id) (M6).
-      const inherited = Object.fromEntries(Object.entries(reply.getHeaders()).filter(([, v]) => v !== undefined)) as Record<string, string | number | string[]>;
-      reply.hijack();
-      const res = reply.raw;
-      res.writeHead(200, {
-        ...inherited,
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache, no-transform",
-        connection: "keep-alive",
-        "x-accel-buffering": "no",
-      });
-      let closed = false;
-      let unsubscribe: (() => void) | undefined;
-      const ping = setInterval(() => res.write(": ping\n\n"), 15_000);
-      function close() {
-        if (closed) return;
-        closed = true;
-        clearInterval(ping);
-        unsubscribe?.();
-        res.end();
-      }
-      req.raw.on("close", close);
-      try {
-        unsubscribe = await deps.bus.follow(p.workspaceId, subject, cursor, (e) => {
-          if (closed) return;
-          res.write(`id: ${e.seq}\nevent: ${e.type}\ndata: ${JSON.stringify(e.data)}\n\n`);
-          if (e.type === "run.finished") close();
-        });
-        if (closed) unsubscribe();
-      } catch (err) {
-        req.log.error({ err, subject }, "fallo abriendo el stream SSE");
-        if (!closed) res.write(`event: error\ndata: ${JSON.stringify({ code: "internal_error" })}\n\n`);
-        close();
-      }
+      await streamSubject(deps, req, reply, p.workspaceId, `run:${run.id}`, ["run.finished"]);
     },
   );
 };

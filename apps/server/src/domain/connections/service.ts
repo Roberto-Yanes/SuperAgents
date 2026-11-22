@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { Db } from "../../data/db.js";
 import type { Prisma } from "../../data/generated/prisma/client.js";
 import { decryptJson, encryptJson } from "../../shared/security/crypto.js";
+import { assertEuResidency, llmPolicyOf, residencyOf } from "./llm-residency.js";
 import { assertAllowedBaseUrl } from "../../shared/security/url-policy.js";
 import { conflict, invalid, notFound } from "../../shared/errors.js";
 import { audit, type Actor } from "../../data/audit.js";
@@ -26,9 +27,18 @@ export class ConnectionService {
     private readonly opts: { baseUrlAllowlist?: string[] } = {},
   ) {}
 
+  /** ADR 005: toda conexión LLM declara proveedor y región UE y pasa la política del workspace. */
+  private async assertResidency(workspaceId: string, kind: string, config: unknown): Promise<void> {
+    if (!kind.startsWith("llm.")) return;
+    const ws = await this.db.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { settings: true } });
+    assertEuResidency(residencyOf(kind, config), llmPolicyOf(ws.settings));
+  }
+
   private assertUrls(config: unknown): void {
-    const baseURL = (config as { baseURL?: unknown } | null)?.baseURL;
-    if (typeof baseURL === "string") assertAllowedBaseUrl(baseURL, this.opts.baseUrlAllowlist);
+    for (const key of ["baseURL", "endpoint"] as const) {
+      const url = (config as Record<string, unknown> | null)?.[key];
+      if (typeof url === "string") assertAllowedBaseUrl(url, this.opts.baseUrlAllowlist);
+    }
   }
 
   list(workspaceId: string) {
@@ -53,6 +63,7 @@ export class ConnectionService {
     const secret = parseOrThrow(spec.secret, input.secret ?? {}, "secret");
     await this.assertAgentInWorkspace(workspaceId, config);
     this.assertUrls(config);
+    await this.assertResidency(workspaceId, input.kind, config);
     const exists = await this.db.connection.findFirst({ where: { workspaceId, name: input.name }, select: { id: true } });
     if (exists) throw conflict("connection_name_taken", `Ya existe una conexión llamada "${input.name}"`);
 
@@ -84,6 +95,8 @@ export class ConnectionService {
       await this.assertAgentInWorkspace(workspaceId, config);
       this.assertUrls(config);
     }
+    // Residencia UE también al reactivar o cambiar la clave: una fila antigua fuera de la UE no vuelve a usarse.
+    if (patch.status !== "DISABLED") await this.assertResidency(workspaceId, kind, config ?? conn.config);
     const updated = await this.db.connection.update({
       where: { id: conn.id },
       data: {

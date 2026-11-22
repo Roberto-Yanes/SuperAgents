@@ -1,8 +1,10 @@
 import { PgBoss } from "pg-boss";
 import type { Logger } from "pino";
 import { JOBS, JobPayloads, type JobName, type JobPayload, type JobQueue, type SendOptions } from "./jobs.js";
+import type { EnqueueOptions, JobPort } from "./ports.js";
 
-export class BossQueue implements JobQueue {
+/** Adaptador pg-boss: el único de producción del puerto de jobs (ADR 004). */
+export class BossQueue implements JobQueue, JobPort {
   readonly boss: PgBoss;
   private started = false;
   private lastErrorAt = 0;
@@ -39,6 +41,15 @@ export class BossQueue implements JobQueue {
   async send<N extends JobName>(name: N, data: JobPayload<N>, options: SendOptions = {}): Promise<string | null> {
     const parsed = JobPayloads[name].parse(data) as object;
     return this.boss.send(name, parsed, options);
+  }
+
+  async enqueue<N extends JobName>(name: N, payload: JobPayload<N>, opts: EnqueueOptions = {}): Promise<void> {
+    await this.send(name, payload, { ...(opts.runAt ? { startAfter: opts.runAt } : {}), ...(opts.group ? { group: { id: opts.group } } : {}) });
+  }
+
+  async schedule<N extends JobName>(name: N, cron: string, payload: JobPayload<N>, opts: { tz?: string; key?: string } = {}): Promise<void> {
+    const parsed = JobPayloads[name].parse(payload) as object;
+    await this.boss.schedule(name, cron, parsed, { ...(opts.tz ? { tz: opts.tz } : {}), ...(opts.key ? { key: opts.key } : {}) });
   }
 
   /** Registra un worker con validación del payload y logs por job. */

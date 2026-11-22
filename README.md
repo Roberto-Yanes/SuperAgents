@@ -53,12 +53,12 @@ Primeros pasos con la API (sustituye `$KEY` por la API key del bootstrap):
 ```bash
 # 1. Conexión LLM (la API key se cifra y nunca se devuelve) y prueba sin gastar tokens
 curl -X POST localhost:3000/v1/connections -H "authorization: Bearer $KEY" -H 'content-type: application/json' \
-  -d '{"kind":"llm.openai","name":"openai-main","secret":{"apiKey":"sk-..."}}'
+  -d '{"kind":"llm.mistral","name":"mistral","secret":{"apiKey":"..."}}'
 curl -X POST localhost:3000/v1/connections/<id>/test -H "authorization: Bearer $KEY"
 
 # 2. Agente que usa esa conexión ("conexión:modelo")
 curl -X POST localhost:3000/v1/agents -H "authorization: Bearer $KEY" -H 'content-type: application/json' \
-  -d '{"name":"Recepción","instructions":"Atiende a los clientes de la clínica.","model":"openai-main:gpt-5-mini","tools":["memory.save","handoff.request"]}'
+  -d '{"name":"Recepción","instructions":"Atiende a los clientes de la clínica.","model":"mistral:mistral-medium-latest","tools":["memory.save","handoff.request"]}'
 
 # 3. WhatsApp: Cloud API (webhook en hints.webhookUrl) o Baileys para pilotos
 curl -X POST localhost:3000/v1/connections -H "authorization: Bearer $KEY" -H 'content-type: application/json' \
@@ -67,7 +67,14 @@ curl -X POST localhost:3000/v1/connections/<id>/session -H "authorization: Beare
 # El QR llega por WebSocket: POST /v1/ws/tickets → wss://.../v1/ws?ticket=... → {"type":"subscribe","subject":"connection:<id>"}
 ```
 
-Tipos de conexión: `llm.openai`, `llm.anthropic`, `llm.google`, `llm.openai_compatible` (Ollama, LM Studio), `composio`, `channel.whatsapp_cloud`, `channel.whatsapp_baileys`.
+```bash
+# 4. Tarea autónoma desde la app (ADR 003): el agente planifica, investiga y ejecuta dentro del cupo
+curl -X POST localhost:3000/v1/tasks -H "authorization: Bearer $KEY" -H 'content-type: application/json' \
+  -d '{"agentId":"<agentId>","goal":"Arma el seguimiento de los leads fríos de esta semana y déjame el borrador","limits":{"maxSteps":40,"maxCostUsd":1}}'
+# Seguir el plan: GET /v1/tasks/<id>/events (SSE) · ampliar cupo: POST /v1/tasks/<id>/limits · dato pedido: POST /v1/tasks/<id>/signal
+```
+
+Tipos de conexión LLM (solo residencia UE, ADR 005): `llm.azure_openai` (región UE demostrable en el endpoint), `llm.mistral`, `llm.openai_compatible` con `provider` `self_hosted` (Ollama/vLLM del propio servidor) o `eu_hosted` (host en `llmPolicy.hosts`). `llm.openai`, `llm.anthropic` y `llm.google` ya no se pueden crear ni usar. Otros: `composio`, `channel.whatsapp_cloud`, `channel.whatsapp_baileys`.
 
 ## Calidad
 

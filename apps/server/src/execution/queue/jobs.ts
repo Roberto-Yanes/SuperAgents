@@ -24,6 +24,8 @@ export const JOBS = {
   channelPoll: "channel.poll",
   /** Troceado + embeddings de un documento de la base de conocimiento. */
   knowledgeIngest: "knowledge.ingest",
+  /** Despertar una Task en espera (plazo, dato externo, tarea hija o cupo ampliado): abre un tramo nuevo (ADR 003). */
+  taskWake: "task.wake",
 } as const;
 
 export type JobName = (typeof JOBS)[keyof typeof JOBS];
@@ -66,6 +68,13 @@ export const JobPayloads = {
   [JOBS.approvalsExpire]: z.object({}).passthrough(),
   [JOBS.channelPoll]: z.object({}).passthrough(),
   [JOBS.knowledgeIngest]: z.object({ workspaceId: z.string().uuid(), documentId: z.string().uuid(), text: z.string() }),
+  [JOBS.taskWake]: z.object({
+    workspaceId: z.string().uuid(),
+    taskId: z.string().uuid(),
+    signal: z.enum(["timer", "external", "child", "limits", "start"]),
+    /** Solo el despertar programado para este plazo vale (un wakeAt viejo no despierta una espera nueva). */
+    waitToken: z.string().optional(),
+  }),
   [JOBS.channelSession]: z.object({ workspaceId: z.string().uuid(), connectionId: z.string().uuid(), action: z.enum(["start", "stop", "logout"]) }),
 } satisfies Record<JobName, z.ZodType>;
 

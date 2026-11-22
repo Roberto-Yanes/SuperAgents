@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { Db } from "../../data/db.js";
 import type { EventBus } from "../../execution/events/bus.js";
 import { toModelToolName, type ResolvedTool } from "../../integrations/tools/registry.js";
-import type { ToolContext, ToolDef, ToolResult } from "../../integrations/tools/types.js";
+import type { TaskToolContext, ToolContext, ToolDef, ToolResult } from "../../integrations/tools/types.js";
 import { canonicalJson, sha256Hex } from "../../shared/security/crypto.js";
 import type { RunWithAgent, StepRecorder } from "./run-store.js";
 import { faceOf } from "./prompt.js";
@@ -37,7 +37,15 @@ export function capToolResult(output: ToolResult, max = MAX_TOOL_RESULT_BYTES): 
  * Las que requieren aprobación se entregan SIN execute: el SDK detiene el bucle y deja la llamada pendiente.
  */
 export class ToolBinder {
+  /** Operaciones de tarea del tramo en curso, por run (las usan también las tools aprobadas al reanudar). */
+  private readonly taskOps = new Map<string, TaskToolContext>();
+
   constructor(private readonly d: { db: Db; bus: EventBus; log: Logger }) {}
+
+  setTaskContext(runId: string, ops: TaskToolContext | null): void {
+    if (ops) this.taskOps.set(runId, ops);
+    else this.taskOps.delete(runId);
+  }
 
   /**
    * @param stepIndex pasos del modelo completados (= los del checkpoint). Junto con tool y argumentos forma la huella
@@ -102,6 +110,7 @@ export class ToolBinder {
       contactId: run.conversation?.contactId ?? null,
       face: faceOf(run),
       idempotencyKey,
+      task: this.taskOps.get(run.id) ?? null,
       db: this.d.db,
       bus: this.d.bus,
       log: this.d.log.child({ runId: run.id }),

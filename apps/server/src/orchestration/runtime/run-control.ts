@@ -3,6 +3,7 @@ import { audit, type Actor } from "../../data/audit.js";
 import { conflict, notFound } from "../../shared/errors.js";
 import type { RunStore } from "./run-store.js";
 import type { ConversationService } from "../../domain/conversations/service.js";
+import type { TaskService } from "../../domain/tasks/service.js";
 
 /**
  * Acciones de una persona sobre un run en curso.
@@ -10,12 +11,14 @@ import type { ConversationService } from "../../domain/conversations/service.js"
  * (aborta y no entrega respuesta) y las aprobaciones pendientes quedan rechazadas.
  */
 export class RunControl {
-  constructor(private readonly d: { db: Db; runs: RunStore; conversations?: Pick<ConversationService, "releaseQueued"> }) {}
+  constructor(
+    private readonly d: { db: Db; runs: RunStore; conversations?: Pick<ConversationService, "releaseQueued">; tasks?: Pick<TaskService, "cancel"> },
+  ) {}
 
   async cancel(workspaceId: string, runId: string, actor: Actor, reason = "Cancelado por una persona"): Promise<void> {
     const run = await this.d.db.run.findFirst({
       where: { id: runId, workspaceId },
-      select: { id: true, workspaceId: true, status: true, conversationId: true },
+      select: { id: true, workspaceId: true, status: true, conversationId: true, taskId: true },
     });
     if (!run) throw notFound("Run");
     const res = await this.d.db.$transaction(async (tx) => {
@@ -33,6 +36,8 @@ export class RunControl {
     });
     if (res === 0) throw conflict("run_not_cancellable", `El run ya terminó (${run.status})`);
     await this.d.runs.publish(run, "run.finished", { status: "CANCELLED", error: reason });
+    // Cancelar el tramo cancela su tarea (y no queda nada esperando que la despierte).
+    if (run.taskId) await this.d.tasks?.cancel(workspaceId, run.taskId, actor, reason).catch(() => undefined);
     if (run.conversationId) await this.d.conversations?.releaseQueued(workspaceId, run.conversationId);
     await audit(this.d.db, { workspaceId, actor, action: "run.cancelled", target: `run:${runId}` });
   }

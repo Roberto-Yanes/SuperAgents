@@ -24,6 +24,11 @@ export const SCOPES = [
   "sequences:write",
   "events:read",
   "api_keys:write",
+  /** Tareas autónomas (ADR 003): lanzar, ver, cancelar, ampliar cupo. */
+  "tasks:read",
+  "tasks:write",
+  /** Políticas del workspace (riesgo, modelos UE). Solo OWNER/ADMIN; bajar send/money exige OWNER. */
+  "workspace:admin",
 ] as const;
 
 export type Scope = (typeof SCOPES)[number];
@@ -45,6 +50,8 @@ const OPERATOR = new Set<Scope>([
   "routines:read",
   "sequences:read",
   "events:read",
+  "tasks:read",
+  "tasks:write",
 ]);
 
 export function scopesForRole(role: MemberRole): Set<Scope> {

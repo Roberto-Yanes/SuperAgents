@@ -7,6 +7,7 @@ import { builtinTools } from "../src/integrations/tools/builtin/index.js";
 import { defineTool, type ToolDef } from "../src/integrations/tools/types.js";
 import { systemActor } from "../src/data/audit.js";
 import { RecordingQueue, resetDb, scriptedModel, seedAgent, testContext, type ScriptedTurn } from "./helpers.js";
+import { allowDirectSend } from "./helpers.js";
 
 /** Tool externa simulada con aprobación del dueño: cuenta cuántas veces se ejecuta de verdad. */
 let sent: Array<{ to: string; idem: string }> = [];
@@ -141,6 +142,7 @@ describe("agent runtime", () => {
   it("override del agente: ASK_OWNER → NEVER se ejecuta sin aprobación", async () => {
     const { ctx } = setup([{ toolCalls: [{ id: "c1", name: "email__send", input: { to: "ana@x.com", body: "x" } }] }, { text: "Enviado." }]);
     const { ws, runId } = await startChat(ctx, ["email.send"], { "email.send": "NEVER" });
+    await allowDirectSend(ctx, ws.id); // E4: send pide aprobación salvo que un OWNER lo baje
     await ctx.runtime.execute(ws.id, runId);
     expect((await ctx.db.run.findUniqueOrThrow({ where: { id: runId } })).status).toBe("SUCCEEDED");
     expect(sent).toHaveLength(1);

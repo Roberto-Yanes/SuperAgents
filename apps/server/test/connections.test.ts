@@ -13,9 +13,11 @@ let graphStatus = 200;
 const fakeFetch: typeof fetch = async (input, init) => {
   const url = String(input);
   calls.push({ url, init });
-  if (url.includes("api.openai.com")) {
+  if (url.includes("api.mistral.ai")) {
     const ok = (init?.headers as Record<string, string>)?.authorization === "Bearer sk-valid-key-123";
-    return new Response(JSON.stringify(ok ? { data: [{ id: "gpt-5-mini" }, { id: "gpt-5" }] } : { error: "bad key" }), { status: ok ? 200 : 401 });
+    return new Response(JSON.stringify(ok ? { data: [{ id: "mistral-medium-latest" }, { id: "mistral-small-latest" }] } : { error: "bad key" }), {
+      status: ok ? 200 : 401,
+    });
   }
   if (url.includes("graph.facebook.com") && url.endsWith("/messages")) {
     return new Response(JSON.stringify(graphStatus === 200 ? { messages: [{ id: "wamid.OUT1" }] } : { error: { message: "boom" } }), { status: graphStatus });
@@ -53,11 +55,11 @@ describe("conexiones", () => {
       method: "POST",
       url: "/v1/connections",
       headers: w.auth,
-      payload: { kind: "llm.openai", name: "openai-main", secret: { apiKey: "sk-valid-key-123" } },
+      payload: { kind: "llm.mistral", name: "mistral-main", secret: { apiKey: "sk-valid-key-123" } },
     });
     expect(res.statusCode).toBe(201);
     expect(res.body).not.toContain("sk-valid-key-123");
-    expect(res.json()).toMatchObject({ kind: "llm.openai", hasSecret: true, status: "PENDING" });
+    expect(res.json()).toMatchObject({ kind: "llm.mistral", hasSecret: true, status: "PENDING" });
     const row = await ctx.db.connection.findFirstOrThrow({ where: { workspaceId: w.workspace.id } });
     expect(Buffer.from(row.secretEnc!).toString("utf8")).not.toContain("sk-valid-key-123");
     const list = await app.inject({ method: "GET", url: "/v1/connections", headers: w.auth });
@@ -70,7 +72,7 @@ describe("conexiones", () => {
     const foreignAgent = await seedAgent(ctx, other.workspace.id);
     const badKind = await app.inject({ method: "POST", url: "/v1/connections", headers: w.auth, payload: { kind: "llm.inventado", name: "x" } });
     expect(badKind.statusCode).toBe(400);
-    const badSecret = await app.inject({ method: "POST", url: "/v1/connections", headers: w.auth, payload: { kind: "llm.openai", name: "x", secret: {} } });
+    const badSecret = await app.inject({ method: "POST", url: "/v1/connections", headers: w.auth, payload: { kind: "llm.mistral", name: "x", secret: {} } });
     expect(badSecret.statusCode).toBe(400);
     expect(badSecret.json().error.code).toBe("invalid_secret");
     const foreign = await app.inject({
@@ -90,7 +92,7 @@ describe("conexiones", () => {
         method: "POST",
         url: "/v1/connections",
         headers: w.auth,
-        payload: { kind: "llm.openai", name: "ok", secret: { apiKey: "sk-valid-key-123" } },
+        payload: { kind: "llm.mistral", name: "ok", secret: { apiKey: "sk-valid-key-123" } },
       })
     ).json();
     const bad = (
@@ -98,11 +100,11 @@ describe("conexiones", () => {
         method: "POST",
         url: "/v1/connections",
         headers: w.auth,
-        payload: { kind: "llm.openai", name: "ko", secret: { apiKey: "sk-wrong-key-000" } },
+        payload: { kind: "llm.mistral", name: "ko", secret: { apiKey: "sk-wrong-key-000" } },
       })
     ).json();
     const t1 = await app.inject({ method: "POST", url: `/v1/connections/${good.id}/test`, headers: w.auth });
-    expect(t1.json()).toMatchObject({ ok: true, details: { sampleModels: ["gpt-5-mini", "gpt-5"] } });
+    expect(t1.json()).toMatchObject({ ok: true, details: { sampleModels: ["mistral-medium-latest", "mistral-small-latest"] } });
     const t2 = await app.inject({ method: "POST", url: `/v1/connections/${bad.id}/test`, headers: w.auth });
     expect(t2.json().ok).toBe(false);
     const rows = await ctx.db.connection.findMany({ where: { workspaceId: w.workspace.id }, orderBy: { name: "asc" } });
@@ -120,7 +122,7 @@ describe("conexiones", () => {
         method: "POST",
         url: "/v1/connections",
         headers: b.auth,
-        payload: { kind: "llm.openai", name: "x", secret: { apiKey: "sk-valid-key-123" } },
+        payload: { kind: "llm.mistral", name: "x", secret: { apiKey: "sk-valid-key-123" } },
       })
     ).json();
     expect((await app.inject({ method: "GET", url: `/v1/connections/${conn.id}`, headers: a.auth })).statusCode).toBe(404);
@@ -145,7 +147,7 @@ describe("sesión de WhatsApp por Baileys", () => {
         method: "POST",
         url: "/v1/connections",
         headers: w.auth,
-        payload: { kind: "llm.openai", name: "llm", secret: { apiKey: "sk-valid-key-123" } },
+        payload: { kind: "llm.mistral", name: "llm", secret: { apiKey: "sk-valid-key-123" } },
       })
     ).json();
     const ok = await app.inject({ method: "POST", url: `/v1/connections/${bl.id}/session`, headers: w.auth, payload: { action: "start" } });

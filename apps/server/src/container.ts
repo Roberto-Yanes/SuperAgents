@@ -10,6 +10,7 @@ import { ApiKeyService } from "./access/auth/api-keys.js";
 import { PrincipalResolver } from "./access/auth/principal-resolver.js";
 import { WsTicketService } from "./access/realtime/tickets.js";
 import { EventBus } from "./execution/events/bus.js";
+import { JobWaitPort, type JobPort, type WaitPort } from "./execution/queue/ports.js";
 import { BossQueue } from "./execution/queue/boss.js";
 import type { JobQueue } from "./execution/queue/jobs.js";
 import { ToolRegistry } from "./integrations/tools/registry.js";
@@ -24,6 +25,10 @@ import { AgentRuntime } from "./orchestration/runtime/agent-runtime.js";
 import { RunStore } from "./orchestration/runtime/run-store.js";
 import { ToolBinder } from "./orchestration/runtime/tool-binder.js";
 import { ReplyDelivery } from "./orchestration/runtime/reply-delivery.js";
+import { TaskStore } from "./orchestration/runtime/task-store.js";
+import { TaskAudit } from "./orchestration/runtime/task-audit.js";
+import { TaskService } from "./domain/tasks/service.js";
+import { WorkspacePolicyService } from "./domain/workspaces/service.js";
 import { RunSweeper } from "./orchestration/runtime/run-sweeper.js";
 import { RunControl } from "./orchestration/runtime/run-control.js";
 import { ApprovalGate } from "./orchestration/approvals/approval-gate.js";
@@ -53,6 +58,9 @@ export interface AppContext {
   auth: Auth;
   bus: EventBus;
   queue: JobQueue;
+  /** Puerto de jobs y esperas (ADR 004): lo que piden las Tasks. Adaptador: pg-boss (o memoria en tests). */
+  jobs: JobPort;
+  waits: WaitPort;
   boss: BossQueue | null;
   secretKeys: Buffer[];
   // acceso
@@ -69,6 +77,8 @@ export interface AppContext {
   routines: RoutineService;
   sequences: SequenceService;
   runQueries: RunQueryService;
+  tasks: TaskService;
+  workspacePolicies: WorkspacePolicyService;
   // orquestación
   llm: LlmResolver;
   runtime: AgentRuntime;
@@ -86,7 +96,7 @@ export interface ContextOverrides {
   log?: Logger;
   llm?: LlmResolver;
   tools?: ToolRegistry;
-  queue?: JobQueue;
+  queue?: JobQueue & JobPort;
   fetch?: typeof fetch;
   composioClient?: ComposioClientFactory;
   baileysFactory?: BaileysSocketFactory;
@@ -100,7 +110,8 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
   const secretKeys = [env.SECRET_KEY, env.SECRET_KEY_OLD].filter((k): k is string => Boolean(k)).map((k) => Buffer.from(k, "base64"));
   const bus = new EventBus(db, env.DATABASE_URL, log.child({ component: "bus" }));
   const boss = o.queue ? null : new BossQueue(env.DATABASE_URL, log.child({ component: "queue" }));
-  const queue: JobQueue = o.queue ?? boss!;
+  const queue: JobQueue & JobPort = o.queue ?? boss!;
+  const waits = new JobWaitPort(queue);
   const fetchImpl = o.fetch ?? fetch;
 
   // Integraciones
@@ -144,6 +155,8 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
     tenantDb,
     secretKeys,
     {
+      "llm.azure_openai": llmTest,
+      "llm.mistral": llmTest,
       "llm.openai": llmTest,
       "llm.anthropic": llmTest,
       "llm.google": llmTest,
@@ -173,6 +186,10 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
   const binder = new ToolBinder({ db: tenantDb, bus, log: log.child({ component: "tools" }) }); // las tools reciben el cliente con guarda
   const gate = new ApprovalGate({ db, bus, tools, binder, ttlHours: env.APPROVAL_TTL_HOURS });
   const delivery = new ReplyDelivery({ db: tenantDb, bus, queue });
+  const taskStore = new TaskStore({ db: tenantDb, bus, queue, waits });
+  const taskAudit = new TaskAudit({ db: tenantDb, tools });
+  const tasks = new TaskService({ db: tenantDb, bus, queue, waits });
+  const workspacePolicies = new WorkspacePolicyService(tenantDb);
   const runtime = new AgentRuntime({
     db: tenantDb,
     bus,
@@ -183,6 +200,9 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
     gate,
     delivery,
     conversations,
+    tasks: taskStore,
+    audit: taskAudit,
+    waits,
     log: log.child({ component: "runtime" }),
     maxSteps: env.RUN_MAX_STEPS,
   });
@@ -195,6 +215,8 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
     auth,
     bus,
     queue,
+    jobs: queue,
+    waits,
     boss,
     secretKeys,
     apiKeys,
@@ -211,9 +233,11 @@ export function createContext(env: Env, o: ContextOverrides = {}): AppContext {
     runQueries,
     llm,
     runtime,
-    runControl: new RunControl({ db: tenantDb, runs, conversations }),
+    tasks,
+    workspacePolicies,
+    runControl: new RunControl({ db: tenantDb, runs, conversations, tasks }),
     // El barrido cruza workspaces a propósito: cliente de sistema. Al dar un run por perdido, suelta la cola (D1).
-    sweeper: new RunSweeper({ db, queue, runs, conversations, log: log.child({ component: "sweeper" }) }),
+    sweeper: new RunSweeper({ db, queue, runs, conversations, tasks: taskStore, log: log.child({ component: "sweeper" }) }),
     approvals,
     tools,
     channels,

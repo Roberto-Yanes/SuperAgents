@@ -21,7 +21,7 @@ const ClientMessage = z.discriminatedUnion("type", [
  *    {type:"event", seq, event, subject, data}: backlog desde "after" y luego en vivo (mismo bus que SSE).
  *    "connection:<id>" (QR y estado de WhatsApp por Baileys) exige además connections:read.
  */
-export type WsDeps = Pick<AppContext, "wsTickets" | "bus" | "runQueries" | "conversations" | "connections"> & { publicUrl: string };
+export type WsDeps = Pick<AppContext, "wsTickets" | "bus" | "runQueries" | "conversations" | "connections" | "tasks"> & { publicUrl: string };
 
 export const wsRoutes: FastifyPluginAsyncZod<{ deps: WsDeps }> = async (app, { deps }) => {
   app.post(
@@ -73,7 +73,8 @@ export const wsRoutes: FastifyPluginAsyncZod<{ deps: WsDeps }> = async (app, { d
           return send({ type: "unsubscribed", subject: parsed.subject });
         }
         const match = parseSubject(parsed.subject);
-        if (!match) return send({ type: "error", code: "bad_subject", message: "subject debe ser run:<uuid>, conversation:<uuid> o connection:<uuid>" });
+        if (!match)
+          return send({ type: "error", code: "bad_subject", message: "subject debe ser run:<uuid>, conversation:<uuid>, connection:<uuid> o task:<uuid>" });
         const subject = match.normalized; // los eventos se publican con el id en minúsculas
         if (subs.has(subject)) return send({ type: "subscribed", subject });
         if (subs.size >= MAX_SUBSCRIPTIONS) return send({ type: "error", code: "too_many_subscriptions", message: `Máximo ${MAX_SUBSCRIPTIONS}` });

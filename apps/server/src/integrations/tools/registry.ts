@@ -1,3 +1,4 @@
+import { applyRiskPolicy, DEFAULT_RISK_POLICY, type RiskPolicy } from "../../domain/workspaces/risk-policy.js";
 import type { ApprovalMode } from "../../data/generated/prisma/enums.js";
 import type { ToolDef, ToolExposure } from "./types.js";
 
@@ -30,7 +31,7 @@ export interface ToolProvider {
 
 /** Lo que el runtime y los servicios necesitan del catálogo de tools. */
 export interface ToolCatalog {
-  resolveForAgent(workspaceId: string, config: AgentToolConfig, face?: ToolExposure): Promise<ResolvedTool[]>;
+  resolveForAgent(workspaceId: string, config: AgentToolConfig, face?: ToolExposure, policy?: RiskPolicy): Promise<ResolvedTool[]>;
   resolve(workspaceId: string, name: string): Promise<ToolDef | undefined>;
   unknownNames(workspaceId: string, names: string[]): Promise<string[]>;
   listForWorkspace(workspaceId: string): Promise<ToolDef[]>;
@@ -71,7 +72,16 @@ export class ToolRegistry implements ToolCatalog {
   }
 
   /** Tools visibles para un agente, con su modo de aprobación efectivo. */
-  async resolveForAgent(workspaceId: string, config: AgentToolConfig, face: ToolExposure = "internal"): Promise<ResolvedTool[]> {
+  /**
+   * Tools del agente para una cara, con su modo final: aprobación de la tool + override del agente, después el piso
+   * de la cara externa y por último la política de riesgo del tenant (que solo endurece).
+   */
+  async resolveForAgent(
+    workspaceId: string,
+    config: AgentToolConfig,
+    face: ToolExposure = "internal",
+    policy: RiskPolicy = DEFAULT_RISK_POLICY,
+  ): Promise<ResolvedTool[]> {
     const enabled = config.tools ?? [];
     const needed = this.providers.filter((p) => enabled.some((n) => n.startsWith(p.prefix)));
     const dynamic = new Map<string, ToolDef>();
@@ -80,9 +90,12 @@ export class ToolRegistry implements ToolCatalog {
       const def = this.defs.get(name) ?? dynamic.get(name);
       if (!def) return [];
       const mode = effectiveApproval(def.approval, config.approvals?.[name]);
-      if (face === "internal" || exposureOf(def) === "external") return [{ def, mode }];
+      // Nativa externa = tool de la plataforma (no de un proveedor) declarada para contactos.
+      const native = this.defs.has(name) && exposureOf(def) === "external";
+      const withPolicy = (m: ApprovalMode) => applyRiskPolicy(m, def.risk, face, policy, native);
+      if (face === "internal" || exposureOf(def) === "external") return [{ def, mode: withPolicy(mode) }];
       if (!config.external?.includes(name)) return []; // tool interna: invisible para contactos
-      return [{ def, mode: def.risk === "read" ? mode : effectiveApproval(mode, "ASK_OWNER") }];
+      return [{ def, mode: withPolicy(def.risk === "read" ? mode : effectiveApproval(mode, "ASK_OWNER")) }];
     });
   }
 
