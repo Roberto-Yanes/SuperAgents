@@ -129,7 +129,7 @@ Logs: `impl-review/srv2-live.log` y `impl-review/fakellm-v2.log`.
 
 ## 5. Marcas de tu PNG (`docs/annotate-estado.py`) que no coinciden con el código
 
-No pude abrir el PNG que adjuntaste en el chat porque es un archivo privado. Usé `docs/arquitectura-v3-estado.png` y `docs/annotate-estado.py` del zip. Ese PNG y ese script son de las 19:06, anteriores a los módulos de dominio (19:12-19:14) y a los fixes (19:57-20:03). Por eso varias marcas quedaron viejas.
+No pude abrir el PNG que adjuntaste en el chat porque es un archivo privado. Usé `docs/arquitectura-v4-estado.png` y `docs/annotate-estado.py` del zip. Ese PNG y ese script son de las 19:06, anteriores a los módulos de dominio (19:12-19:14) y a los fixes (19:57-20:03). Por eso varias marcas quedaron viejas.
 
 | Bloque | Tu marca | Lo verificado | Nueva marca |
 |---|---|---|---|

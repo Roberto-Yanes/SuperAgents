@@ -8,7 +8,7 @@ La dirección de producto no es un catálogo de flujos ni “solo WhatsApp”. E
 
 El diagrama y la tabla de capas son la foto del motor. Si un estado dice “pendiente” y [REVIEW-FIXES.md](REVIEW-FIXES.md) lo marca hecho, quedate con la revisión.
 
-Estado de implementación marcado sobre el diagrama: [arquitectura-v3-estado.png](arquitectura-v3-estado.png) (se regenera con `python3 docs/annotate-estado.py`).
+Estado de implementación marcado sobre el diagrama: [arquitectura-v4-estado.png](arquitectura-v4-estado.png) (se regenera con `python3 docs/annotate-estado.py`).
 
 ## Capas y carpetas
 
